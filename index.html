@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Gavthan — Billing</title>
+<!--
+  Google Identity Services is loaded as a runtime global (window.google.accounts).
+  It has no clean npm package for the OAuth2 code-client flow this app uses, so it
+  stays a script tag. Everything else (React, Supabase, Sortable, html2canvas, XLSX,
+  ESC/POS thermal module) is bundled by Vite from npm.
+-->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
