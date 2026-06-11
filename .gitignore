@@ -1,0 +1,12 @@
+node_modules
+dist
+.env
+.env.local
+.env.*.local
+.DS_Store
+*.log
+.vite
+
+# IMPORTANT: package-lock.json is intentionally NOT ignored.
+# Committing it makes builds reproducible across machines and on Vercel
+# (npm ci requires it). Do not add it here.
