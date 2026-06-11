@@ -232,6 +232,31 @@ var useState  = React.useState;
 var useEffect = React.useEffect;
 var useRef    = React.useRef;
 
+// ── THEME (light / dark) ───────────────────────────
+// Persisted in localStorage; first run follows the OS preference. Applied to
+// <html data-theme> so the CSS variable palette in styles.css switches.
+function getTheme(){
+  try{var t=localStorage.getItem('gh-theme');if(t==='dark'||t==='light')return t;}catch(e){}
+  return (window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';
+}
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme',t);
+  var meta=document.querySelector('meta[name="theme-color"]');
+  if(meta)meta.setAttribute('content',t==='dark'?'#1e1a15':'#ffffff');
+}
+applyTheme(getTheme()); // run at import time to avoid a flash of the wrong theme
+
+function ThemeToggle(){
+  var _t=useState(getTheme());var t=_t[0];var setT=_t[1];
+  function flip(){
+    var nx=t==='dark'?'light':'dark';
+    try{localStorage.setItem('gh-theme',nx);}catch(e){}
+    applyTheme(nx);setT(nx);
+  }
+  return h('button',{className:'theme-toggle',title:t==='dark'?'Switch to light mode':'Switch to dark mode',
+    'aria-label':'Toggle theme',onClick:flip},t==='dark'?'☀':'☾');
+}
+
 // ── HELPERS ────────────────────────────────────────
 function tot(items){return items.reduce(function(s,i){return s+i.price*i.qty;},0);}
 // Raw items total
@@ -384,7 +409,7 @@ function SetupScreen(){
         '3. Project Settings → API → copy Project URL and anon/public key',h('br',null),
         '4. Paste into window.GH_CONFIG in this file',h('br',null),h('br',null),
         h('strong',null,'Step 2 — Create tables (run in Supabase → SQL Editor):'),h('br',null),
-        h('code',{style:{display:'block',background:'#fff',padding:'8px',borderRadius:4,margin:'6px 0',fontSize:10,lineHeight:1.5,whiteSpace:'pre',overflowX:'auto'}},sql)
+        h('code',{style:{display:'block',background:'var(--surface)',padding:'8px',borderRadius:4,margin:'6px 0',fontSize:10,lineHeight:1.5,whiteSpace:'pre',overflowX:'auto'}},sql)
       )
     )
   );
@@ -476,7 +501,7 @@ function LoginScreen(props){
             h('div',{style:{textAlign:'center',fontSize:11,marginBottom:6}},
               h('span',{style:{color:'#B45309',cursor:'pointer',fontWeight:600},onClick:doForgot},'Forgot password?')
             ),
-            h('div',{style:{textAlign:'center',fontSize:11,color:'#6b6b67'}},
+            h('div',{style:{textAlign:'center',fontSize:11,color:'var(--text-2)'}},
               'No account? Ask your admin to create one for you.'
             )
           )
@@ -967,7 +992,7 @@ function App(props){
   // admin = role-based (includes promoted admins) → Menu, Cust
   // superAdmin = strictly GH_ADMINS seeded emails → Users tab only
   var superAdmin=isAdminEmail(user.email);
-  if(admin){tabs.push(['menu','Menu']);tabs.push(['customers','Cust']);}
+  if(admin){tabs.push(['menu','Menu']);tabs.push(['customers','Cust']);tabs.push(['manager','Manager']);}
   if(superAdmin){tabs.push(['users','Config']);}
 
   return h('div',{className:'wrap'},
@@ -985,8 +1010,9 @@ function App(props){
           style:{width:8,height:8,borderRadius:'50%',flexShrink:0,
             background:dbOk===null?'#d1d5db':dbOk?'#22c55e':'#ef4444',
             boxShadow:dbOk?'0 0 4px #22c55e':'none'}}),
-        h('span',{style:{fontSize:12,color:'#6b6b67',whiteSpace:'nowrap'}},'Hi ',h('strong',null,displayName)),
+        h('span',{style:{fontSize:12,color:'var(--text-2)',whiteSpace:'nowrap'}},'Hi ',h('strong',null,displayName)),
         h('span',{className:admin?'badge-admin':'badge-user'},admin?'Admin':'Staff'),
+        h(ThemeToggle,null),
         h('button',{className:'btn xs btn-r',onClick:logout},'⏻ Sign Out')
       )
     ),
@@ -998,6 +1024,7 @@ function App(props){
       tab==='history' &&h(HistoryTab, {settled,todayRev,todaySett,cats,setBillId,delCust,admin,userEmail:user.email,users}),
       tab==='menu'    &&admin&&h(MenuTab,{cats,saveCats,menu,addMenuItem,updateMenuItem,deleteMenuItem,toggleMenuAvail,reorderItems}),
       tab==='customers'&&admin&&h(CustomersTab,{custs}),
+      tab==='manager' &&admin&&h(ManagerTab,{custs,cats,users}),
       tab==='users'   &&superAdmin&&h(UsersTab,{users,currentUid:user.id,currentEmail:user.email,superAdmin:superAdmin,addUser,toggleUserActive,changeUserRole,sendReset,deleteUser,sessionTimeout,saveSessionTimeout,backupDatabase,restoreFromBackup,driveInterval,saveDriveInterval,driveLast})
     ),
     billCust&&h(BillModal,{cust:billCust,cats,previewBillNo:previewBillNo,onClose:function(){setBillId(null);},
@@ -1077,7 +1104,7 @@ function OrderPanel(props){
     h('div',{style:{fontSize:11,color:'#B45309',fontWeight:700,letterSpacing:0.5,marginBottom:4}},'➕ ADD ITEMS'),
     h('input',{placeholder:'Search menu…',value:q,onChange:function(e){setQ(e.target.value);},style:{marginBottom:6}}),
     h('div',{className:'cats'},cats.map(function(c){return h('button',{key:c,className:cat===c?'on':'',title:c,onClick:function(){setCat(c);},style:{fontSize:18,padding:'4px 10px',lineHeight:1}},catIcon(c));})),
-    h('div',{className:'sb'},filtered.length===0?h('div',{style:{fontSize:12,color:'#6b6b67',padding:8}},'No items.'):
+    h('div',{className:'sb'},filtered.length===0?h('div',{style:{fontSize:12,color:'var(--text-2)',padding:8}},'No items.'):
       filtered.map(function(mi){
         var inO=cust.items.find(function(i){return i.id===mi.id;});
         return h('div',{key:mi.id,className:'mi-pick'+(inO?' in':''),onClick:function(){upsertItem(cust.id,mi.id,1);}},
@@ -1100,7 +1127,7 @@ function OrderPanel(props){
           h(Chip,{cat:it.cat,cats}),
           h('div',{style:{flex:1,minWidth:0}},
             h('div',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},it.name),
-            tms.length>0&&h('div',{style:{fontSize:9,color:'#9b9b97'}},
+            tms.length>0&&h('div',{style:{fontSize:9,color:'var(--text-3)'}},
               tms.length<=3
                 ? tms.map(timeOf).join(' · ')
                 : timeOf(tms[0])+' … '+timeOf(tms[tms.length-1])+' ('+tms.length+'×)')
@@ -1120,7 +1147,7 @@ function OrderPanel(props){
         cust.adjustment_on&&aAmt!==0&&h('div',{className:'row bw',style:{color:(aAmt<0?'#166534':'#991B1B')}},
           h('span',null,'Adjustment'),h('span',null,(aAmt>0?'+':'')+'₹'+aAmt)
         ),
-        h('div',{className:'row bw',style:{fontWeight:700,fontSize:14,paddingTop:3,borderTop:'1px solid #e0ddd6',marginTop:3}},
+        h('div',{className:'row bw',style:{fontWeight:700,fontSize:14,paddingTop:3,borderTop:'1px solid var(--border)',marginTop:3}},
           h('span',null,'Total'),
           h('span',{style:{color:grand===0?'#991B1B':'#B45309'}},'₹'+grand)
         )
@@ -1149,13 +1176,13 @@ function OrderPanel(props){
     // Reason field — auto-enabled & mandatory when a discount/adjustment value is entered.
     h('div',{style:{marginBottom:4}},
       h('div',{className:'row bw',style:{marginBottom:3}},
-        h('span',{style:{fontSize:12,fontWeight:600,color:reasonNeeded?'#B45309':'#9b9b97'}},
+        h('span',{style:{fontSize:12,fontWeight:600,color:reasonNeeded?'#B45309':'var(--text-3)'}},
           'Reason'+(reasonNeeded?' *':'')),
         reasonNeeded&&!reason.trim()&&h('span',{style:{fontSize:10,color:'#991B1B',fontWeight:700}},'Required')
       ),
       h('input',{value:reason,disabled:!reasonNeeded,
         placeholder:reasonNeeded?'Why is discount/adjustment applied?':'Enter a discount or adjustment first',
-        style:{background:reasonNeeded?'#fff':'#f0ede8',borderColor:reasonNeeded&&!reason.trim()?'#991B1B':undefined},
+        style:{background:reasonNeeded?'var(--surface)':'var(--surface-2)',borderColor:reasonNeeded&&!reason.trim()?'#991B1B':undefined},
         onChange:function(e){setReason(e.target.value);},
         onBlur:function(){if(updateCustomer)updateCustomer(cust.id,{reason:reason.trim()});},
         onKeyDown:function(e){if(e.key==='Enter'&&updateCustomer)updateCustomer(cust.id,{reason:reason.trim()});}})
@@ -1254,9 +1281,9 @@ function NewTab(props){
       h('div',{className:'ttl'},'Repeat Customer?'),
       h('div',{className:'muted',style:{fontSize:11,marginBottom:6}},'Search by name or phone — fills the form automatically.'),
       h('input',{placeholder:'Type name or phone (min 2 chars)…',value:search,onChange:function(e){setSearch(e.target.value);}}),
-      matches.length>0&&h('div',{style:{marginTop:6,maxHeight:160,overflowY:'auto',border:'1px solid #e0ddd6',borderRadius:6}},
+      matches.length>0&&h('div',{style:{marginTop:6,maxHeight:160,overflowY:'auto',border:'1px solid var(--border)',borderRadius:6}},
         matches.map(function(c){
-          return h('div',{key:c.id,style:{padding:'6px 10px',borderBottom:'1px solid #f0ede8',cursor:'pointer',fontSize:12},onClick:function(){pickCustomer(c);}},
+          return h('div',{key:c.id,style:{padding:'6px 10px',borderBottom:'1px solid var(--surface-2)',cursor:'pointer',fontSize:12},onClick:function(){pickCustomer(c);}},
             h('div',{style:{fontWeight:700}},c.name),
             h('div',{className:'muted',style:{fontSize:10}},(c.phone||'no phone')+' · last visit '+fmtDT(c.date))
           );
@@ -1298,8 +1325,8 @@ function NewTab(props){
               billDate!==todayYMD&&h('div',{style:{fontSize:10,color:'#B45309',marginTop:2,fontWeight:600}},'⚠ Backdated bill — '+billDate)
             )
           : h('div',null,
-              h('input',{type:'date',value:todayYMD,disabled:true,style:{background:'#f0ede8'}}),
-              h('div',{style:{fontSize:10,color:'#6b6b67',marginTop:2}},'Backdated bills are admin-only.')
+              h('input',{type:'date',value:todayYMD,disabled:true,style:{background:'var(--surface-2)'}}),
+              h('div',{style:{fontSize:10,color:'var(--text-2)',marginTop:2}},'Backdated bills are admin-only.')
             )
       ),
       h('button',{className:'btn btn-a',style:{width:'100%',marginTop:4,justifyContent:'center'},onClick:submit},'Add Customer'),
@@ -1338,7 +1365,7 @@ function HistoryTab(props){
                 h('button',{className:'btn xs',onClick:function(){setBillId(c.id);}},'🧾 Bill'))
             ),
             h('div',{className:'row',style:{gap:5}},h('span',{className:'muted',style:{fontSize:10}},fmtDT(c.date)),h('span',{className:'tag-s'},'Settled'),c.bill_no&&h('span',{style:{fontSize:10,fontWeight:700,color:'#B45309'}},fmtBill(c.bill_no))),
-            h('div',{style:{fontSize:11,color:'#6b6b67'}},c.items.slice(0,3).map(function(i){return i.name+'×'+i.qty;}).join(', ')+(c.items.length>3?', …':'')),
+            h('div',{style:{fontSize:11,color:'var(--text-2)'}},c.items.slice(0,3).map(function(i){return i.name+'×'+i.qty;}).join(', ')+(c.items.length>3?', …':'')),
             (c.discount_on||c.adjustment_on)&&c.reason&&h('div',{style:{fontSize:11,color:'#B45309',fontStyle:'italic'}},'Reason: '+c.reason)
           );
         })
@@ -1486,7 +1513,7 @@ function HistoryTab(props){
               return Object.keys(byStaff).map(function(k){
                 var su=(props.users||[]).find(function(u){return u.email===k;});
                 var nm=su?(su.display_name||k.split('@')[0]):k;
-                return h('div',{key:k,className:'row bw',style:{fontSize:12,padding:'4px 0',borderBottom:'1px dotted #e0ddd6'}},
+                return h('div',{key:k,className:'row bw',style:{fontSize:12,padding:'4px 0',borderBottom:'1px dotted var(--border)'}},
                   h('span',null,nm+' — '+byStaff[k].count+' bill'+(byStaff[k].count!==1?'s':'')),
                   h('span',{style:{fontWeight:700,color:'#B45309'}},'₹'+byStaff[k].rev)
                 );
@@ -1531,7 +1558,7 @@ function HistoryTab(props){
           staffList.map(function(u){return h('option',{key:u.id,value:u.email},initCap(u.display_name||u.email.split('@')[0]));})
         )
       ),
-      h('div',{className:'row bw',style:{fontSize:11,color:'#6b6b67',margin:'6px 0 8px'}},
+      h('div',{className:'row bw',style:{fontSize:11,color:'var(--text-2)',margin:'6px 0 8px'}},
         h('span',null,shown.length+' record'+(shown.length!==1?'s':'')+(hasFilter?' (filtered)':'')+(shown.length>PAGE_SIZE?' — page '+(safePage+1)+'/'+totalPages:'')),
         shown.length>0&&h('span',{style:{fontWeight:700,color:'#B45309'}},'Total: ₹'+shownRev)
       ),
@@ -1552,14 +1579,14 @@ function HistoryTab(props){
           h('div',{className:'row',style:{gap:5,flexWrap:'wrap'}},
             c.settled_at&&h('span',{className:'muted',style:{fontSize:10}},fmtDT(c.date)),c.bill_no&&h('span',{style:{fontSize:10,fontWeight:700,color:'#B45309'}},fmtBill(c.bill_no)),
             h('span',{className:'tag-s'},'Settled'),
-            sn&&h('span',{style:{fontSize:10,color:'#6b6b67'}},'by '+sn)
+            sn&&h('span',{style:{fontSize:10,color:'var(--text-2)'}},'by '+sn)
           ),
-          h('div',{style:{fontSize:11,color:'#6b6b67'}},c.items.slice(0,3).map(function(i){return i.name+'×'+i.qty;}).join(', ')+(c.items.length>3?', …':'')),
+          h('div',{style:{fontSize:11,color:'var(--text-2)'}},c.items.slice(0,3).map(function(i){return i.name+'×'+i.qty;}).join(', ')+(c.items.length>3?', …':'')),
           (c.discount_on||c.adjustment_on)&&c.reason&&h('div',{style:{fontSize:11,color:'#B45309',fontStyle:'italic'}},'Reason: '+c.reason)
         );
       }),
       // Pagination controls
-      shown.length>PAGE_SIZE&&h('div',{className:'row bw',style:{marginTop:10,paddingTop:8,borderTop:'1px solid #e0ddd6'}},
+      shown.length>PAGE_SIZE&&h('div',{className:'row bw',style:{marginTop:10,paddingTop:8,borderTop:'1px solid var(--border)'}},
         h('button',{className:'btn xs',onClick:function(){setPage(Math.max(0,safePage-1));},disabled:safePage===0,style:{opacity:safePage===0?0.4:1}},'← Prev'),
         h('div',{style:{display:'flex',gap:3,flexWrap:'wrap',justifyContent:'center'}},
           (function(){
@@ -1667,9 +1694,9 @@ function MenuTab(props){
           h('button',{className:'btn xs',onClick:function(){setEditCatId(null);}},'Cancel')
         ));
         return h('div',{key:cat,'data-cat':cat,style:{marginBottom:6}},
-          h('div',{className:'row bw',style:{background:cat===selCat?'#f0ede8':'#fff',border:'1px solid #e0ddd6',borderRadius:8,padding:'7px 10px',cursor:'pointer'},onClick:function(){setSelCat(cat);}},
+          h('div',{className:'row bw',style:{background:cat===selCat?'var(--surface-2)':'var(--surface)',border:'1px solid var(--border)',borderRadius:8,padding:'7px 10px',cursor:'pointer'},onClick:function(){setSelCat(cat);}},
             h('div',{className:'row',style:{gap:6,flex:1,minWidth:0}},
-              h('span',{className:'dh',title:'Drag to reorder',onClick:function(e){e.stopPropagation();},style:{cursor:'grab',touchAction:'none',userSelect:'none',color:'#9b9b97',padding:'0 4px',fontSize:14,fontWeight:700}},'⋮⋮'),
+              h('span',{className:'dh',title:'Drag to reorder',onClick:function(e){e.stopPropagation();},style:{cursor:'grab',touchAction:'none',userSelect:'none',color:'var(--text-3)',padding:'0 4px',fontSize:14,fontWeight:700}},'⋮⋮'),
               h(Chip,{cat,cats}),
               h('span',{style:{fontWeight:cat===selCat?700:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},cat),
               h('span',{className:'muted',style:{fontSize:11}},cnt+' item'+(cnt!==1?'s':''))
@@ -1698,7 +1725,7 @@ function MenuTab(props){
           );
           var avail=it.available!==false;
           return h('div',{key:it.id,'data-itemid':it.id,className:'li',style:{opacity:avail?1:0.55}},
-            h('span',{className:'dh',title:'Drag to reorder',style:{cursor:'grab',touchAction:'none',userSelect:'none',color:'#9b9b97',padding:'0 4px',fontSize:14,fontWeight:700,flexShrink:0}},'⋮⋮'),
+            h('span',{className:'dh',title:'Drag to reorder',style:{cursor:'grab',touchAction:'none',userSelect:'none',color:'var(--text-3)',padding:'0 4px',fontSize:14,fontWeight:700,flexShrink:0}},'⋮⋮'),
             h('span',{style:{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},it.name,!avail&&h('span',{style:{fontSize:10,color:'#991B1B',fontWeight:700,marginLeft:5}},'OUT OF STOCK')),
             h('span',{style:{fontWeight:700,color:'#B45309',minWidth:40,textAlign:'right'}},'₹'+it.price),
             h('button',{className:'btn xs '+(avail?'btn-r':'btn-g'),style:{marginLeft:8},onClick:function(){toggleMenuAvail(it.id,!avail);}},avail?'Mark Out':'Mark In'),
@@ -1765,7 +1792,7 @@ function CustomersTab(props){
             h('span',{style:{fontWeight:700,fontSize:13}},r.name),
             h('span',{style:{fontWeight:700,color:'#B45309'}},'₹'+r.totalSpent)
           ),
-          h('div',{className:'row',style:{gap:6,flexWrap:'wrap',fontSize:11,color:'#6b6b67'}},
+          h('div',{className:'row',style:{gap:6,flexWrap:'wrap',fontSize:11,color:'var(--text-2)'}},
             r.phone&&h('span',null,'📞 '+r.phone),
             h('span',null,'🗓 '+r.visits+' visit'+(r.visits!==1?'s':'')+' ('+r.settled+' settled)'),
             h('span',null,'Last: '+fmtDT(r.lastVisit))
@@ -1920,7 +1947,7 @@ function UsersTab(props){
         h('label',{className:'btn btn-r xs',style:{cursor:'pointer'}},'⬆ Restore from File',
           h('input',{type:'file',accept:'.json,application/json',style:{display:'none'},onChange:doRestoreFile}))
       ),
-      restoreMsg&&h('div',{style:{marginTop:6,fontSize:11,color:restoreMsg.indexOf('✓')===0?'#166534':(restoreMsg.indexOf('Error')!==-1?'#991B1B':'#6b6b67'),whiteSpace:'pre-wrap'}},restoreMsg),
+      restoreMsg&&h('div',{style:{marginTop:6,fontSize:11,color:restoreMsg.indexOf('✓')===0?'#166534':(restoreMsg.indexOf('Error')!==-1?'#991B1B':'var(--text-2)'),whiteSpace:'pre-wrap'}},restoreMsg),
       h('div',{className:'muted',style:{fontSize:10,marginTop:6}},'Restore handles missing categories by auto-creating them. Item references in past orders are snapshots so they survive menu changes.')
     ),
     // Google Drive sync card
@@ -1955,11 +1982,11 @@ function UsersTab(props){
                 h('button',{className:'btn xs btn-r',onClick:driveDeleteAll,title:'Delete every backup from Drive'},'🗑 Delete All')
               ),
               driveLast&&h('div',{className:'muted',style:{fontSize:10,marginBottom:6}},'Last auto-backup: '+fmtDT(driveLast)),
-              driveFiles&&h('div',{style:{maxHeight:200,overflowY:'auto',border:'1px solid #e0ddd6',borderRadius:6,padding:4}},
+              driveFiles&&h('div',{style:{maxHeight:200,overflowY:'auto',border:'1px solid var(--border)',borderRadius:6,padding:4}},
                 driveFiles.length===0
                   ? h('div',{className:'muted',style:{fontSize:11,padding:6}},'No backups in Drive yet.')
                   : driveFiles.map(function(f){
-                      return h('div',{key:f.id,className:'row bw',style:{padding:'5px 6px',fontSize:11,borderBottom:'1px dotted #e0ddd6'}},
+                      return h('div',{key:f.id,className:'row bw',style:{padding:'5px 6px',fontSize:11,borderBottom:'1px dotted var(--border)'}},
                         h('div',{style:{flex:1,minWidth:0}},
                           h('div',{style:{fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},f.name),
                           h('div',{className:'muted',style:{fontSize:10}},fmtDT(f.createdTime)+(f.size?' · '+Math.round(f.size/1024)+' KB':''))
@@ -1972,7 +1999,7 @@ function UsersTab(props){
                     })
               )
             ),
-            driveMsg&&h('div',{style:{marginTop:6,fontSize:11,color:driveMsg.indexOf('✓')!==-1?'#166534':(driveMsg.indexOf('Error')!==-1?'#991B1B':'#6b6b67'),whiteSpace:'pre-wrap'}},driveMsg)
+            driveMsg&&h('div',{style:{marginTop:6,fontSize:11,color:driveMsg.indexOf('✓')!==-1?'#166534':(driveMsg.indexOf('Error')!==-1?'#991B1B':'var(--text-2)'),whiteSpace:'pre-wrap'}},driveMsg)
           )
     ),
     h('div',{className:'card'},
@@ -2022,6 +2049,185 @@ function UsersTab(props){
       h('button',{className:'btn btn-a',style:{width:'100%',justifyContent:'center'},onClick:doAdd,disabled:busy},busy&&h('span',{className:'spin'}),'Add Staff User'),
       h('div',{className:'muted',style:{fontSize:11,marginTop:8}},'Share temp password with staff. Use Reset Pwd to send them email to set their own.')
     )
+  );
+}
+
+// ── MANAGER TAB (admin-only analytics dashboard) ───
+// Pure read-only view computed from settled bills (mh_customers, status==='settled').
+// finalTotal()/rawTotal() are the same helpers the rest of the app bills with, so
+// every figure here ties out exactly to History/receipts.
+function inr(n){return '₹'+Math.round(n||0).toLocaleString('en-IN');}
+function ManagerTab(props){
+  var custs=props.custs||[],users=props.users||[];
+  var _per=useState('30d');var per=_per[0];var setPer=_per[1];
+
+  var settled=custs.filter(function(c){return c.status==='settled';});
+  function billDate(c){return new Date(c.settled_at||c.date);}
+  var now=new Date();
+  var todayKey=now.toDateString();
+
+  // ── KPIs (fixed windows) ──
+  var today=settled.filter(function(c){return billDate(c).toDateString()===todayKey;});
+  var todayRev=today.reduce(function(s,c){return s+finalTotal(c);},0);
+  var todayAvg=today.length?Math.round(todayRev/today.length):0;
+  var month=settled.filter(function(c){var d=billDate(c);return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();});
+  var monthRev=month.reduce(function(s,c){return s+finalTotal(c);},0);
+
+  // ── Gauge: today vs your best-ever day ──
+  var byDay={};settled.forEach(function(c){var k=billDate(c).toDateString();byDay[k]=(byDay[k]||0)+finalTotal(c);});
+  var dayVals=Object.keys(byDay).map(function(k){return byDay[k];});
+  var bestDay=Math.max.apply(null,[1].concat(dayVals));
+  var gaugePct=Math.min(1,bestDay?todayRev/bestDay:0);
+  var R=42,C=2*Math.PI*R,ARC=C*0.75;            // 270° dial, gap at the bottom
+  var off=ARC*(1-gaugePct);
+
+  // ── Last 7 days ──
+  var days=[];
+  for(var i=6;i>=0;i--){var d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-i);days.push({d:d,key:d.toDateString(),rev:0,bills:0});}
+  settled.forEach(function(c){var k=billDate(c).toDateString();var slot=null;for(var j=0;j<days.length;j++)if(days[j].key===k){slot=days[j];break;}if(slot){slot.rev+=finalTotal(c);slot.bills++;}});
+  var maxDay=Math.max.apply(null,[1].concat(days.map(function(x){return x.rev;})));
+  var peakIdx=0;days.forEach(function(x,idx){if(x.rev>days[peakIdx].rev)peakIdx=idx;});
+  var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  // ── Period-filtered breakdowns ──
+  function inPeriod(c){
+    if(per==='all')return true;
+    var d=billDate(c);
+    if(per==='today')return d.toDateString()===todayKey;
+    var diff=(now-d)/86400000;
+    return per==='7d'?diff<7:diff<30;
+  }
+  var pbills=settled.filter(inPeriod);
+  var perRev=pbills.reduce(function(s,c){return s+finalTotal(c);},0);
+
+  // Top items by quantity
+  var itemMap={};
+  pbills.forEach(function(c){(c.items||[]).forEach(function(it){
+    var m=itemMap[it.name]||(itemMap[it.name]={name:it.name,qty:0,rev:0,cat:it.cat});
+    m.qty+=it.qty;m.rev+=it.price*it.qty;
+  });});
+  var topItems=Object.keys(itemMap).map(function(k){return itemMap[k];}).sort(function(a,b){return b.qty-a.qty;}).slice(0,6);
+  var maxItemQty=Math.max.apply(null,[1].concat(topItems.map(function(x){return x.qty;})));
+
+  // Sales by staff
+  function staffName(email){var u=users.filter(function(x){return x.email===email;})[0];return (u&&u.display_name)?u.display_name:initCap((email||'—').split('@')[0]);}
+  var staffMap={};
+  pbills.forEach(function(c){var k=c.added_by||'—';var m=staffMap[k]||(staffMap[k]={email:k,rev:0,bills:0});m.rev+=finalTotal(c);m.bills++;});
+  var topStaff=Object.keys(staffMap).map(function(k){return staffMap[k];}).sort(function(a,b){return b.rev-a.rev;}).slice(0,6);
+  var maxStaffRev=Math.max.apply(null,[1].concat(topStaff.map(function(x){return x.rev;})));
+
+  // Sales by category
+  var catMap={};
+  pbills.forEach(function(c){(c.items||[]).forEach(function(it){var k=it.cat||'Other';catMap[k]=(catMap[k]||0)+it.price*it.qty;});});
+  var topCats=Object.keys(catMap).map(function(k){return{cat:k,rev:catMap[k]};}).sort(function(a,b){return b.rev-a.rev;}).slice(0,8);
+  var maxCatRev=Math.max.apply(null,[1].concat(topCats.map(function(x){return x.rev;})));
+
+  // Busiest hours (by bill count)
+  var hours=[];for(var hh=0;hh<24;hh++)hours.push(0);
+  pbills.forEach(function(c){hours[billDate(c).getHours()]++;});
+  var maxHour=Math.max.apply(null,[1].concat(hours));
+
+  var perLabel={today:'Today','7d':'Last 7 days','30d':'Last 30 days',all:'All time'}[per];
+
+  if(settled.length===0)
+    return h('div',{className:'empty'},'📊 No settled bills yet. Once you settle some orders, your sales analytics will appear here.');
+
+  return h('div',{className:'dash'},
+    // ── Hero gauge ──
+    h('div',{className:'gauge-card'},
+      h('div',{className:'gauge-wrap'},
+        h('svg',{className:'gauge-svg',viewBox:'0 0 100 100'},
+          h('defs',null,h('linearGradient',{id:'gaugeGrad',x1:'0',y1:'0',x2:'1',y2:'1'},
+            h('stop',{offset:'0%',stopColor:'#f59e0b'}),
+            h('stop',{offset:'100%',stopColor:'#b45309'}))),
+          h('circle',{className:'gauge-arc-bg',cx:50,cy:50,r:R,strokeWidth:9,strokeDasharray:ARC+' '+C}),
+          h('circle',{className:'gauge-arc-fg',cx:50,cy:50,r:R,strokeWidth:9,strokeDasharray:ARC+' '+C,strokeDashoffset:off})
+        ),
+        h('div',{className:'gauge-center'},
+          h('div',{className:'gauge-cap'},"Today's Sales"),
+          h('div',{className:'gauge-val'},inr(todayRev)),
+          h('div',{className:'gauge-sub'},today.length+' bill'+(today.length===1?'':'s')+' · '+Math.round(gaugePct*100)+'% of best day')
+        )
+      )
+    ),
+    // ── KPI cards ──
+    h('div',{className:'kpis'},
+      h('div',{className:'kpi'},h('div',{className:'kpi-l'},'📈 This Month'),h('div',{className:'kpi-v'},inr(monthRev)),h('div',{className:'kpi-sub'},month.length+' bills')),
+      h('div',{className:'kpi'},h('div',{className:'kpi-l'},'🧾 Avg Bill (today)'),h('div',{className:'kpi-v'},inr(todayAvg))),
+      h('div',{className:'kpi'},h('div',{className:'kpi-l'},'🏆 Best Day'),h('div',{className:'kpi-v'},inr(bestDay))),
+      h('div',{className:'kpi'},h('div',{className:'kpi-l'},'∑ All-time'),h('div',{className:'kpi-v'},inr(settled.reduce(function(s,c){return s+finalTotal(c);},0))),h('div',{className:'kpi-sub'},settled.length+' bills'))
+    ),
+    // ── 7-day bar chart ──
+    h('div',{className:'panel'},
+      h('div',{className:'panel-h'},h('span',null,'Revenue · last 7 days'),h('span',{className:'muted'},inr(days.reduce(function(s,x){return s+x.rev;},0)))),
+      h('div',{className:'bars'},days.map(function(x,idx){
+        return h('div',{key:x.key,className:'bar-col'+(idx===peakIdx&&x.rev>0?' peak':'')},
+          h('div',{className:'bar-v'},x.rev?('₹'+(x.rev>=1000?(Math.round(x.rev/100)/10)+'k':Math.round(x.rev))):''),
+          h('div',{className:'bar-track'},h('div',{className:'bar-fill',style:{height:(x.rev/maxDay*100)+'%'}})),
+          h('div',{className:'bar-x'},DOW[x.d.getDay()])
+        );
+      }))
+    ),
+    // ── Period selector (drives the breakdown panels below) ──
+    h('div',{className:'cats',style:{marginBottom:0,marginTop:2}},
+      [['today','Today'],['7d','7 days'],['30d','30 days'],['all','All time']].map(function(p){
+        return h('button',{key:p[0],className:per===p[0]?'on':'',onClick:function(){setPer(p[0]);}},p[1]);
+      })
+    ),
+    // ── Top items ──
+    h('div',{className:'panel'},
+      h('div',{className:'panel-h'},h('span',null,'Top items'),h('span',{className:'muted'},perLabel)),
+      topItems.length?h('div',{className:'rank'},topItems.map(function(it,idx){
+        return h('div',{key:it.name,className:'rank-row'},
+          h('div',{className:'rank-rank'},idx+1),
+          h('div',{className:'rank-main'},
+            h('div',{className:'rank-name'},it.name),
+            h('div',{className:'rank-bar'},h('div',{className:'rank-bar-fill',style:{width:(it.qty/maxItemQty*100)+'%'}}))
+          ),
+          h('div',{className:'rank-val'},it.qty,h('small',null,' sold'))
+        );
+      })):h('div',{className:'empty'},'No sales in this period.')
+    ),
+    // ── Sales by staff ──
+    h('div',{className:'panel'},
+      h('div',{className:'panel-h'},h('span',null,'Sales by staff'),h('span',{className:'muted'},inr(perRev))),
+      topStaff.length?h('div',{className:'rank'},topStaff.map(function(st,idx){
+        return h('div',{key:st.email,className:'rank-row'},
+          h('div',{className:'rank-rank'},idx+1),
+          h('div',{className:'rank-main'},
+            h('div',{className:'rank-name'},staffName(st.email),h('span',{className:'muted',style:{fontWeight:600}},'· '+st.bills)),
+            h('div',{className:'rank-bar'},h('div',{className:'rank-bar-fill',style:{width:(st.rev/maxStaffRev*100)+'%'}}))
+          ),
+          h('div',{className:'rank-val'},inr(st.rev))
+        );
+      })):h('div',{className:'empty'},'No sales in this period.')
+    ),
+    // ── Sales by category ──
+    h('div',{className:'panel'},
+      h('div',{className:'panel-h'},h('span',null,'Sales by category'),h('span',{className:'muted'},perLabel)),
+      topCats.length?h('div',{className:'rank'},topCats.map(function(ct,idx){
+        return h('div',{key:ct.cat,className:'rank-row'},
+          h('div',{className:'rank-main'},
+            h('div',{className:'rank-name'},catIcon(ct.cat),' ',ct.cat),
+            h('div',{className:'rank-bar'},h('div',{className:'rank-bar-fill',style:{width:(ct.rev/maxCatRev*100)+'%'}}))
+          ),
+          h('div',{className:'rank-val'},inr(ct.rev))
+        );
+      })):h('div',{className:'empty'},'No sales in this period.')
+    ),
+    // ── Busiest hours ──
+    h('div',{className:'panel'},
+      h('div',{className:'panel-h'},h('span',null,'Busiest hours'),h('span',{className:'muted'},'by bills · '+perLabel)),
+      h('div',{className:'heat'},hours.map(function(v,hr){
+        var op=v?(0.18+0.82*(v/maxHour)):0.12;
+        return h('div',{key:hr,className:'heat-cell',title:hr+':00 — '+v+' bills',
+          style:{background:'rgba(180,83,9,'+op.toFixed(2)+')'}});
+      })),
+      h('div',{className:'row bw',style:{marginTop:2}},['12a','6a','12p','6p','11p'].map(function(l,idx){
+        return h('div',{key:idx,className:'heat-x',style:{flex:'none'}},l);
+      }))
+    ),
+    h('div',{style:{height:4}})
   );
 }
 
@@ -2276,14 +2482,14 @@ function BillModal(props){
           ),
           edited&&h('button',{className:'btn btn-a xs',style:{width:'100%',justifyContent:'center'},onClick:saveEdits},'💾 Save Changes')
         ),
-        h('div',{ref:billRef,style:{background:'#fff',padding:'4px 0'}},
-        h('div',{style:{textAlign:'center',marginBottom:12}},h('div',{style:{fontSize:18,fontWeight:700,letterSpacing:3}},'GAVTHAN'),h('div',{style:{fontSize:11,color:'#6b6b67'}},'Receipt / Bill')),
+        h('div',{ref:billRef,className:'receipt',style:{background:'#fff',padding:'4px 0'}},
+        h('div',{style:{textAlign:'center',marginBottom:12}},h('div',{style:{fontSize:18,fontWeight:700,letterSpacing:3}},'GAVTHAN'),h('div',{style:{fontSize:11,color:'var(--text-2)'}},'Receipt / Bill')),
         h('div',{style:{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:2}},h('b',null,cust.name),h('span',null,dateOf(cust.date))),
         h('div',{style:{fontSize:12,marginBottom:2}},'Room/Table: ',h('b',null,cust.room)),
         cust.phone&&h('div',{style:{fontSize:12,marginBottom:4}},'Ph: ',h('b',null,cust.phone)),
         h('div',{className:'hr'}),
         h('table',{style:{width:'100%',fontSize:12,borderCollapse:'collapse'}},
-          h('thead',null,h('tr',null,['Item','Qty','Rate','Amt'].map(function(hd,i){return h('th',{key:hd,style:{textAlign:i===0?'left':'right',padding:'3px 0',borderBottom:'1px solid #e0ddd6',fontWeight:700}},hd);}))),
+          h('thead',null,h('tr',null,['Item','Qty','Rate','Amt'].map(function(hd,i){return h('th',{key:hd,style:{textAlign:i===0?'left':'right',padding:'3px 0',borderBottom:'1px solid var(--border)',fontWeight:700}},hd);}))),
           h('tbody',null,cust.items.map(function(it){return h('tr',{key:it.id},h('td',{style:{padding:'4px 0'}},it.name),h('td',{style:{textAlign:'right',padding:'4px 0'}},it.qty),h('td',{style:{textAlign:'right',padding:'4px 0'}},'₹'+it.price),h('td',{style:{textAlign:'right',padding:'4px 0',fontWeight:700}},'₹'+(it.price*it.qty)));}))
         ),
         h('div',{className:'hr'}),
@@ -2291,16 +2497,16 @@ function BillModal(props){
           var dA=discountAmt(cust),aA=adjustAmt(cust);
           if(!(dA>0||cust.adjustment_on&&aA!==0)) return null;
           var rowsB=[h('div',{key:'s',style:{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:2}},
-            h('span',{style:{color:'#6b6b67'}},'Subtotal'),h('span',null,'₹'+rawTotal(cust)))];
+            h('span',{style:{color:'var(--text-2)'}},'Subtotal'),h('span',null,'₹'+rawTotal(cust)))];
           if(dA>0) rowsB.push(h('div',{key:'d',style:{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:2,color:'#166534'}},
             h('span',null,'Discount ('+cust.discount_pct+'%)'),h('span',null,'-₹'+dA)));
           if(cust.adjustment_on&&aA!==0) rowsB.push(h('div',{key:'a',style:{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:2,color:aA<0?'#166534':'#991B1B'}},
             h('span',null,'Adjustment'),h('span',null,(aA>0?'+':'')+'₹'+aA)));
-          if((cust.discount_on||cust.adjustment_on)&&cust.reason) rowsB.push(h('div',{key:'r',style:{fontSize:11,color:'#6b6b67',fontStyle:'italic',marginBottom:2}},'Reason: '+cust.reason));
+          if((cust.discount_on||cust.adjustment_on)&&cust.reason) rowsB.push(h('div',{key:'r',style:{fontSize:11,color:'var(--text-2)',fontStyle:'italic',marginBottom:2}},'Reason: '+cust.reason));
           return h('div',{style:{marginBottom:6}},rowsB);
         })(),
         h('div',{style:{display:'flex',justifyContent:'space-between',fontWeight:700,fontSize:16}},h('span',null,'Total'),h('span',{style:{color:'#B45309'}},'₹'+t)),
-        h('div',{style:{textAlign:'center',fontSize:11,color:'#6b6b67',marginTop:12}},'Thank you for visiting Gavthan!')
+        h('div',{style:{textAlign:'center',fontSize:11,color:'var(--text-2)',marginTop:12}},'Thank you for visiting Gavthan!')
         )
       )
     )

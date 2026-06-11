@@ -40,7 +40,51 @@
   --shadow-lg:0 18px 48px rgba(35,24,8,.20);
   --ring:0 0 0 3px rgba(180,83,9,.18);
 
+  /* Frosted "liquid glass" surfaces */
+  --glass:rgba(255,255,255,.72);
+  --glass-2:rgba(255,255,255,.55);
+  --glass-border:rgba(255,255,255,.6);
+  --glass-blur:saturate(1.7) blur(14px);
+
   --hdr-h:54px;
+  color-scheme:light;
+}
+
+/* ── Dark theme — warm, low-glare "night kitchen" palette ─────────────────── */
+:root[data-theme="dark"]{
+  --bg:#14110d;
+  --surface:#1e1a15;
+  --surface-2:#27211a;
+  --surface-3:#322a21;
+  --border:#352d23;
+  --border-strong:#483e31;
+
+  --text:#f4ece0;
+  --text-2:#b6ac9c;
+  --text-3:#857b6d;
+
+  --primary:#e08a3c;
+  --primary-600:#cf7a2c;
+  --primary-700:#b9691f;
+  --primary-tint:#2c2113;
+  --primary-tint-2:#3c2d18;
+
+  --green:#5cd08a;  --green-bg:#15301f;  --green-border:#235a39;
+  --red:#f0908f;    --red-bg:#3a1a1b;    --red-border:#5e2a2c;
+  --amber:#e6bd72;  --amber-bg:#322611;  --amber-border:#5a4720;
+  --blue:#92b2f1;   --blue-bg:#171f39;   --blue-border:#28365e;
+
+  --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+  --shadow:0 2px 6px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.4);
+  --shadow-lg:0 20px 50px rgba(0,0,0,.6);
+  --ring:0 0 0 3px rgba(224,138,60,.3);
+
+  --glass:rgba(34,29,23,.66);
+  --glass-2:rgba(34,29,23,.45);
+  --glass-border:rgba(255,255,255,.08);
+  --bg-glow:#241b11;
+
+  color-scheme:dark;
 }
 
 *{box-sizing:border-box;margin:0;padding:0}
@@ -53,7 +97,7 @@ body{
   line-height:1.5;
   color:var(--text);
   background:
-    radial-gradient(1200px 600px at 50% -10%, #fbf7ef 0%, transparent 60%),
+    radial-gradient(1200px 600px at 50% -10%, var(--bg-glow, #fbf7ef) 0%, transparent 60%),
     var(--bg);
   -webkit-font-smoothing:antialiased;
   -moz-osx-font-smoothing:grayscale;
@@ -86,9 +130,9 @@ body{
 }
 
 .hdr{
-  background:rgba(255,255,255,.85);
-  backdrop-filter:saturate(1.6) blur(10px);
-  -webkit-backdrop-filter:saturate(1.6) blur(10px);
+  background:var(--glass);
+  backdrop-filter:var(--glass-blur);
+  -webkit-backdrop-filter:var(--glass-blur);
   border-bottom:1px solid var(--border);
   padding:9px 14px;
   padding-top:max(9px,env(safe-area-inset-top));
@@ -363,6 +407,157 @@ select{appearance:none;-webkit-appearance:none;
 
 @media (min-width:1024px){
   .wrap{max-width:880px}
+}
+
+/* ============================================================================
+   Theme toggle + frosted-glass utility
+   ========================================================================== */
+.theme-toggle{
+  width:32px;height:32px;flex-shrink:0;
+  border:1px solid var(--border-strong);
+  border-radius:50%;
+  background:var(--surface-2);
+  color:var(--text-2);
+  cursor:pointer;font-size:15px;line-height:1;
+  display:inline-flex;align-items:center;justify-content:center;
+  transition:background .15s,color .15s,border-color .15s,transform .12s;
+  -webkit-tap-highlight-color:transparent;
+}
+.theme-toggle:hover{color:var(--primary);border-color:var(--primary);transform:rotate(-12deg)}
+
+.glass{
+  background:var(--glass);
+  backdrop-filter:var(--glass-blur);
+  -webkit-backdrop-filter:var(--glass-blur);
+  border:1px solid var(--glass-border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-sm);
+}
+
+/* ============================================================================
+   Manager analytics dashboard
+   ========================================================================== */
+.dash{display:flex;flex-direction:column;gap:12px}
+
+/* Hero gauge card — the "thermostat dial" reimagined as a live revenue gauge */
+.gauge-card{
+  position:relative;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;
+  padding:20px 16px 18px;
+  border-radius:var(--radius-lg);
+  background:
+    radial-gradient(120% 90% at 50% -20%, var(--primary-tint) 0%, transparent 60%),
+    var(--glass);
+  backdrop-filter:var(--glass-blur);
+  -webkit-backdrop-filter:var(--glass-blur);
+  border:1px solid var(--glass-border);
+  box-shadow:var(--shadow);
+}
+.gauge-card::after{ /* soft top sheen for the skeuomorphic glass feel */
+  content:"";position:absolute;inset:0 0 auto 0;height:42%;
+  background:linear-gradient(180deg,rgba(255,255,255,.16),transparent);
+  pointer-events:none;
+}
+.gauge-wrap{position:relative;width:200px;height:200px;display:flex;align-items:center;justify-content:center}
+.gauge-svg{position:absolute;inset:0;transform:rotate(135deg);transform-origin:center}
+.gauge-arc-bg{fill:none;stroke:var(--surface-3);stroke-linecap:round}
+.gauge-arc-fg{fill:none;stroke:url(#gaugeGrad);stroke-linecap:round;transition:stroke-dashoffset .9s cubic-bezier(.2,.8,.2,1);filter:drop-shadow(0 0 6px rgba(217,118,30,.5))}
+.gauge-center{position:relative;text-align:center;z-index:1}
+.gauge-cap{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-3)}
+.gauge-val{font-size:30px;font-weight:800;letter-spacing:-.03em;line-height:1.05;margin-top:3px}
+.gauge-sub{font-size:11px;color:var(--text-2);margin-top:4px}
+
+/* KPI grid */
+.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.kpi{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:13px 14px;
+  box-shadow:var(--shadow-sm);
+}
+.kpi-l{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-2);display:flex;align-items:center;gap:5px}
+.kpi-v{font-size:21px;font-weight:800;letter-spacing:-.02em;margin-top:4px}
+.kpi-sub{font-size:11px;color:var(--text-3);margin-top:2px}
+
+/* Section panel */
+.panel{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:14px;
+  box-shadow:var(--shadow-sm);
+}
+.panel-h{font-size:12px;font-weight:800;letter-spacing:-.01em;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;color:var(--text)}
+.panel-h .muted{font-weight:600;font-size:11px}
+
+/* Mini bar chart (last 7 days) */
+.bars{display:flex;align-items:stretch;gap:7px;height:124px;padding-top:6px}
+.bar-col{flex:1;height:100%;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0}
+.bar-track{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center}
+.bar-fill{
+  width:74%;max-width:30px;border-radius:6px 6px 3px 3px;
+  background:linear-gradient(180deg,var(--primary),var(--primary-700));
+  min-height:3px;transition:height .7s cubic-bezier(.2,.8,.2,1);
+  box-shadow:0 2px 6px rgba(180,83,9,.25);
+}
+.bar-col.peak .bar-fill{background:linear-gradient(180deg,#22c55e,#15803d);box-shadow:0 2px 6px rgba(21,128,61,.3)}
+.bar-x{font-size:9px;color:var(--text-3);white-space:nowrap}
+.bar-v{font-size:9px;font-weight:700;color:var(--text-2)}
+
+/* Ranked rows (top items / staff / category) with inline progress */
+.rank{display:flex;flex-direction:column;gap:9px}
+.rank-row{display:flex;align-items:center;gap:9px}
+.rank-rank{width:20px;height:20px;flex-shrink:0;border-radius:50%;background:var(--surface-3);color:var(--text-2);font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.rank-row:nth-child(1) .rank-rank{background:var(--primary);color:#fff}
+.rank-main{flex:1;min-width:0}
+.rank-name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px}
+.rank-bar{height:5px;border-radius:5px;background:var(--surface-3);margin-top:5px;overflow:hidden}
+.rank-bar-fill{height:100%;border-radius:5px;background:linear-gradient(90deg,var(--primary-700),var(--primary));transition:width .7s cubic-bezier(.2,.8,.2,1)}
+.rank-val{font-size:12px;font-weight:800;flex-shrink:0;color:var(--text)}
+.rank-val small{font-weight:600;color:var(--text-3);font-size:10px}
+
+/* Heat row (busiest hours) */
+.heat{display:flex;gap:3px}
+.heat-cell{flex:1;height:34px;border-radius:5px;background:var(--surface-3);position:relative;min-width:0}
+.heat-x{font-size:8px;color:var(--text-3);text-align:center;margin-top:3px}
+
+/* Printed/PDF bill receipt — always light (dark text on white) regardless of
+   the app theme, so it scans on paper and in exported PDFs. Pins tokens locally
+   so the var()-based inline colors inside resolve to fixed light values. */
+.receipt{
+  background:#fff;color:#1a1a18;
+  --surface:#fff;--surface-2:#f0ede8;--surface-3:#f0ede8;
+  --text:#1a1a18;--text-2:#6b6b67;--text-3:#9b9b97;
+  --border:#e0ddd6;--primary:#b45309;
+}
+
+/* ── Dark-mode fixups for views with hard-coded light gradients ──────────── */
+:root[data-theme="dark"] .mi-pick{
+  background:linear-gradient(135deg,#2a2113,#241c12);
+  border-color:#4a3a1f;
+}
+:root[data-theme="dark"] .mi-pick:hover{background:linear-gradient(135deg,#332815,#2b2113)}
+:root[data-theme="dark"] .mi-pick.in{background:linear-gradient(135deg,#1c2c16,#172312);border-left-color:#5cd08a}
+:root[data-theme="dark"] .mi-pick .mi-name{color:var(--text)}
+:root[data-theme="dark"] .mi-pick .mi-price{background:var(--surface-2);color:var(--primary)}
+:root[data-theme="dark"] .mi-pick .mi-qty{color:#5cd08a}
+:root[data-theme="dark"] .met{background:linear-gradient(160deg,var(--surface-2),var(--surface-3))}
+:root[data-theme="dark"] .gauge-card::after{background:linear-gradient(180deg,rgba(255,255,255,.05),transparent)}
+:root[data-theme="dark"] .login-wrap{
+  background:
+    radial-gradient(900px 500px at 50% -5%, #2a2012 0%, transparent 55%),
+    radial-gradient(700px 500px at 100% 100%, #221a12 0%, transparent 50%),
+    var(--bg);
+}
+
+/* ============================================================================
+   Responsive — dashboard widens on web
+   ========================================================================== */
+@media (min-width:768px){
+  .kpis{grid-template-columns:repeat(4,1fr)}
+  .gauge-wrap{width:230px;height:230px}
+  .gauge-val{font-size:34px}
 }
 
 /* Respect users who prefer less motion */
