@@ -1,7 +1,7 @@
 # Gavthan — Billing (React + Vite)
 
-This is the React + Vite build of the original single-file `index.html` Gavthan
-hotel billing PWA. The proven runtime logic is preserved verbatim; only the
+This is the React + Vite build of the  Gavthan
+billing PWA. The proven runtime logic is preserved verbatim; only the
 packaging changed: CDN `<script>` globals became npm imports, config moved to
 env vars, and there's a real build step.
 
@@ -23,20 +23,6 @@ gavthan-app/
    └─ styles.css         # all styles, extracted from the original <style> block
 ```
 
-### How the conversion works
-
-- `app.js` is the original main script with an import header added. It still uses
-  `React.createElement` (aliased `h`) — **no JSX**, so no JSX transform is needed and
-  the component code is untouched.
-- Globals the old code expected are now real imports: `react`, `@supabase/supabase-js`,
-  `sortablejs`, `html2canvas`, `xlsx`, and the local `thermal-print.js`. The one call
-  that used `window.supabase.createClient(...)` is satisfied by a tiny shim in `app.js`.
-- **Google Identity Services** (`window.google.accounts`, used for Drive OAuth) stays a
-  runtime global via the `<script src="https://accounts.google.com/gsi/client">` tag in
-  `index.html` — it has no clean npm package for the code-client flow.
-- Config (`window.GH_CONFIG` / `window.GH_ADMINS`) is populated by `config-init.js` from
-  Vite env vars. `app.js` imports `config-init.js` first, so config exists before the
-  app's top-level code (which builds the Supabase client and admin list) runs.
 
 ## Local development
 
@@ -98,12 +84,7 @@ as-is). The app then loads at `https://<user>.github.io/gavthan-react-app/`.
 > ship in every client bundle. Real secrets stay server-side in your two Edge
 > Functions (`drive-token`, `user-admin`), which are unchanged by this migration.
 
-## Backend — unchanged
 
-This migration only touches the frontend. Your Supabase project
-(`glaksnwcmiijiztsncvi`), tables (`mh_categories`, `mh_menu`, `mh_customers`,
-`mh_users`, `mh_config`, `mh_drive_creds`), and Edge Functions
-(`drive-token`, `user-admin`) are untouched and still required.
 
 ## Notes / follow-ups
 
