@@ -1388,13 +1388,16 @@ function HistoryTab(props){
   var shown=settled.filter(function(c){
     if(selStaff!=='all'&&(c.added_by||'')!==selStaff)return false;
     if(searchName){var n=searchName.toLowerCase();if(c.name.toLowerCase().indexOf(n)===-1&&c.room.toLowerCase().indexOf(n)===-1)return false;}
-    var dt=c.date?new Date(c.date):(c.settled_at?new Date(c.settled_at):null);
+    // Bucket by settled_at (the canonical bill date) so History ties out exactly
+    // to the Manager dashboard, which uses settled_at||date. Fall back to date
+    // for legacy bills with no settled_at.
+    var dt=c.settled_at?new Date(c.settled_at):(c.date?new Date(c.date):null);
     if(!dt)return true;
     if(filterMode==='date'){if(dateFrom&&dt<new Date(dateFrom))return false;if(dateTo&&dt>new Date(dateTo+'T23:59:59'))return false;}
     else if(filterMode==='month'){if(String(dt.getMonth()+1).padStart(2,'0')!==selMonth)return false;if(String(dt.getFullYear())!==selYear)return false;}
     else if(filterMode==='year'){if(String(dt.getFullYear())!==selYear)return false;}
     return true;
-  }).sort(function(a,b){return new Date(b.date||b.settled_at)-new Date(a.date||a.settled_at);});
+  }).sort(function(a,b){return new Date(b.settled_at||b.date)-new Date(a.settled_at||a.date);});
   var shownRev=shown.reduce(function(s,c){return s+finalTotal(c);},0);
   var totalPages=Math.max(1,Math.ceil(shown.length/PAGE_SIZE));
   var safePage=Math.min(page,totalPages-1);
@@ -1577,7 +1580,7 @@ function HistoryTab(props){
             )
           ),
           h('div',{className:'row',style:{gap:5,flexWrap:'wrap'}},
-            c.settled_at&&h('span',{className:'muted',style:{fontSize:10}},fmtDT(c.date)),c.bill_no&&h('span',{style:{fontSize:10,fontWeight:700,color:'#B45309'}},fmtBill(c.bill_no)),
+            c.settled_at&&h('span',{className:'muted',style:{fontSize:10}},fmtDT(c.settled_at||c.date)),c.bill_no&&h('span',{style:{fontSize:10,fontWeight:700,color:'#B45309'}},fmtBill(c.bill_no)),
             h('span',{className:'tag-s'},'Settled'),
             sn&&h('span',{style:{fontSize:10,color:'var(--text-2)'}},'by '+sn)
           ),
