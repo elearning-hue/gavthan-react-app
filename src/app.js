@@ -536,6 +536,8 @@ function App(props){
   var _menuErr=useState('');var menuErr=_menuErr[0];var setMenuErr=_menuErr[1];
   var _myUser=useState(null);var myUser=_myUser[0];var setMyUser=_myUser[1];
   var _timeout=useState(30);var sessionTimeout=_timeout[0];var setSessionTimeout=_timeout[1];
+  // UPI ID for bills — DB-configurable (mh_config.app.data.upiId), falls back to the build-time constant
+  var _upi=useState(UPI_ID);var upiId=_upi[0];var setUpiId=_upi[1];
 
   // ── Fetch all data from Supabase ──
   function fetchAll(silent){
@@ -568,8 +570,11 @@ function App(props){
     function loadConfig(){
       supa.from('mh_config').select('data').eq('id','app').maybeSingle()
         .then(function(r){
-          if(r.data&&r.data.data&&r.data.data.sessionTimeout)
-            setSessionTimeout(Number(r.data.data.sessionTimeout)||30);
+          var d=r.data&&r.data.data;
+          if(d&&d.sessionTimeout)
+            setSessionTimeout(Number(d.sessionTimeout)||30);
+          if(d&&typeof d.upiId==='string')
+            setUpiId(d.upiId);
         },function(){});
     }
     loadConfig();
@@ -748,6 +753,20 @@ function App(props){
       .then(function(r){
         var cfg=(r.data&&r.data.data)||{};
         cfg.sessionTimeout=m;
+        return supa.from('mh_config').upsert({id:'app',data:cfg});
+      })
+      .then(function(r){if(r&&r.error)showErr(new Error(sbErr(r.error)));})
+      .catch(showErr);
+  }
+
+  function saveUpiId(val){
+    var v=(val||'').trim();
+    setUpiId(v);
+    // Merge into existing config so other keys (sessionTimeout, lastBillNo) aren't wiped
+    supa.from('mh_config').select('data').eq('id','app').maybeSingle()
+      .then(function(r){
+        var cfg=(r.data&&r.data.data)||{};
+        cfg.upiId=v;
         return supa.from('mh_config').upsert({id:'app',data:cfg});
       })
       .then(function(r){if(r&&r.error)showErr(new Error(sbErr(r.error)));})
@@ -1030,9 +1049,9 @@ function App(props){
       tab==='menu'    &&admin&&h(MenuTab,{cats,saveCats,menu,addMenuItem,updateMenuItem,deleteMenuItem,toggleMenuAvail,reorderItems}),
       tab==='customers'&&admin&&h(CustomersTab,{custs}),
       tab==='manager' &&admin&&h(ManagerTab,{custs,cats,users}),
-      tab==='users'   &&superAdmin&&h(UsersTab,{users,currentUid:user.id,currentEmail:user.email,superAdmin:superAdmin,addUser,toggleUserActive,changeUserRole,sendReset,deleteUser,sessionTimeout,saveSessionTimeout,backupDatabase,restoreFromBackup,driveInterval,saveDriveInterval,driveLast})
+      tab==='users'   &&superAdmin&&h(UsersTab,{users,currentUid:user.id,currentEmail:user.email,superAdmin:superAdmin,addUser,toggleUserActive,changeUserRole,sendReset,deleteUser,sessionTimeout,saveSessionTimeout,upiId,saveUpiId,backupDatabase,restoreFromBackup,driveInterval,saveDriveInterval,driveLast})
     ),
-    billCust&&h(BillModal,{cust:billCust,cats,previewBillNo:previewBillNo,onClose:function(){setBillId(null);},
+    billCust&&h(BillModal,{cust:billCust,cats,previewBillNo:previewBillNo,upiId:upiId,onClose:function(){setBillId(null);},
       updateCustomer:updateCustomer,
       onSavePhone:function(ph){
         supa.from('mh_customers').update({phone:ph}).eq('id',billCust.id)
@@ -1824,6 +1843,7 @@ function UsersTab(props){
   var toggleUserActive=props.toggleUserActive,changeUserRole=props.changeUserRole;
   var sendReset=props.sendReset,deleteUser=props.deleteUser;
   var sessionTimeout=props.sessionTimeout,saveSessionTimeout=props.saveSessionTimeout;
+  var upiId=props.upiId||'',saveUpiId=props.saveUpiId;
   var backupDatabase=props.backupDatabase;
   var restoreFromBackup=props.restoreFromBackup;
   var driveInterval=props.driveInterval||'off',saveDriveInterval=props.saveDriveInterval,driveLast=props.driveLast;
@@ -1885,6 +1905,9 @@ function UsersTab(props){
     Drive.deleteAll().then(function(r){setDriveMsg('✓ Deleted '+r.deleted+' of '+(r.total||r.deleted)+' backups.');driveListBackups();}).catch(function(e){setDriveMsg('Error: '+e.message);});
   }
   var _to=useState(String(sessionTimeout||30));var toVal=_to[0];var setToVal=_to[1];
+  var _upiV=useState(upiId);var upiVal=_upiV[0];var setUpiVal=_upiV[1];
+  var _upiMsg=useState('');var upiMsg=_upiMsg[0];var setUpiMsg=_upiMsg[1];
+  useEffect(function(){setUpiVal(upiId);},[upiId]);
   // Thermal printer settings
   var _thermSettings=useState(ThermalPrinter.settings());var thermSettings=_thermSettings[0];var setThermSettingsState=_thermSettings[1];
   function saveThermSettings(s){ThermalPrinter.saveSettings(s);setThermSettingsState(s);}
@@ -1920,6 +1943,23 @@ function UsersTab(props){
         h('button',{className:'btn btn-a xs',onClick:function(){saveSessionTimeout(toVal);}},'Save')
       ),
       h('div',{className:'muted',style:{fontSize:10,marginTop:4}},'Currently: '+(sessionTimeout||30)+' min. Applies to all users.')
+    ),
+    // UPI Payment card — the VPA printed on new bills (leave blank to hide the UPI block)
+    h('div',{className:'card'},
+      h('div',{className:'ttl'},'UPI Payment'),
+      h('div',{className:'muted',style:{fontSize:11,marginBottom:8}},'UPI ID (VPA) shown on bills for instant payment. Leave blank to hide the UPI block on all bills.'),
+      h('div',{className:'row',style:{gap:6}},
+        h('input',{type:'text',value:upiVal,placeholder:'name@bank',style:{flex:1},
+          onChange:function(e){setUpiVal(e.target.value);}}),
+        h('button',{className:'btn btn-a xs',onClick:function(){
+          var v=(upiVal||'').trim();
+          if(v&&v.indexOf('@')===-1){setUpiMsg('Invalid UPI ID — must look like name@bank.');setTimeout(function(){setUpiMsg('');},3000);return;}
+          if(saveUpiId)saveUpiId(v);
+          setUpiMsg(v?'✓ UPI ID saved.':'✓ UPI block disabled.');setTimeout(function(){setUpiMsg('');},3000);
+        }},'Save')
+      ),
+      h('div',{className:'muted',style:{fontSize:10,marginTop:4}},upiId?('Currently: '+upiId):'No UPI ID set — the UPI block is hidden on bills.'),
+      upiMsg&&h('div',{style:{marginTop:6,fontSize:12,color:upiMsg.indexOf('✓')!==-1?'#166534':'#991B1B'}},upiMsg)
     ),
     // Thermal Printer Settings card
     h('div',{className:'card'},
@@ -2244,6 +2284,8 @@ function BillModal(props){
   var cust=props.cust,onClose=props.onClose,onSavePhone=props.onSavePhone;
   var updateCustomer=props.updateCustomer;
   var previewBillNo=props.previewBillNo;
+  // UPI ID from live config (falls back to the build-time constant for older callers)
+  var upiId=props.upiId!=null?props.upiId:UPI_ID;
   // Displayed bill number = locked one if settled, else current preview (lastBillNo+1)
   // STRICT: settled bills lock to their stored bill_no immutably; preview only used for unsettled
   var displayBillNo=(cust.status==='settled')?(cust.bill_no||null):(cust.bill_no||previewBillNo||null);
@@ -2299,10 +2341,10 @@ function BillModal(props){
       lines.push('Reason: '+cust.reason);
     }
     // UPI payment link (UPI VPA must NOT be URL-encoded; @ is literal)
-    if(UPI_ID){
+    if(upiId){
       var amt=Math.round(Number(t)); // integer rupees, no decimals
       // Standard NPCI UPI deep link spec — pa unencoded, pn/tn encoded
-      var upiLink='upi://pay?pa='+UPI_ID
+      var upiLink='upi://pay?pa='+upiId
         +'&pn='+encodeURIComponent(HOTEL_NAME)
         +'&am='+amt
         +'&cu=INR'
@@ -2372,7 +2414,7 @@ function BillModal(props){
     }
     // Date/time shown on the bill = the immutable official Bill Date & Time (see billDateTime)
     var billTs=billDateTime(cust)||cust.date;
-    var body='<h2>GAVTHAN</h2><div class="sub">Receipt / Bill'+(displayBillNo?' '+fmtBill(displayBillNo):'')+'</div><div class="inf"><span><b>'+escHtml(cust.name)+'</b></span><span>'+escHtml(dateOf(billTs))+'</span></div><div class="inf"><span>Room/Table: <b>'+escHtml(cust.room)+'</b></span><span>'+escHtml(timeOf(billTs))+'</span></div>'+(cust.phone?'<div class="inf"><span>Ph: '+escHtml(cust.phone)+'</span></div>':'')+'<hr><table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amt</th></tr></thead><tbody>'+rows+'</tbody></table><hr>'+breakdown+'<div class="tot"><span>TOTAL</span><span>&#8377;'+t+'</span></div>'+(UPI_ID?'<hr><div style="text-align:center;font-size:11px;margin-top:6px"><b>Pay via UPI</b><br/>'+escHtml(UPI_ID)+'<br/>Amount: &#8377;'+t+'</div>':'')+'<div class="foot">Thank you for visiting Gavthan!<br>Please come again.</div>';
+    var body='<h2>GAVTHAN</h2><div class="sub">Receipt / Bill'+(displayBillNo?' '+fmtBill(displayBillNo):'')+'</div><div class="inf"><span><b>'+escHtml(cust.name)+'</b></span><span>'+escHtml(dateOf(billTs))+'</span></div><div class="inf"><span>Room/Table: <b>'+escHtml(cust.room)+'</b></span><span>'+escHtml(timeOf(billTs))+'</span></div>'+(cust.phone?'<div class="inf"><span>Ph: '+escHtml(cust.phone)+'</span></div>':'')+'<hr><table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amt</th></tr></thead><tbody>'+rows+'</tbody></table><hr>'+breakdown+'<div class="tot"><span>TOTAL</span><span>&#8377;'+t+'</span></div>'+(upiId?'<hr><div style="text-align:center;font-size:11px;margin-top:6px"><b>Pay via UPI</b><br/>'+escHtml(upiId)+'<br/>Amount: &#8377;'+t+'</div>':'')+'<div class="foot">Thank you for visiting Gavthan!<br>Please come again.</div>';
     return {css:css,body:body};
   }
 
@@ -2434,7 +2476,7 @@ function BillModal(props){
   function thermalPrint(){
     if(t===0){alert('Cannot print a zero-amount bill.');return;}
     try{
-      var bytes=ESCPOS.encodeBill(cust,{hotel:HOTEL_NAME,upi:UPI_ID,previewBillNo:previewBillNo});
+      var bytes=ESCPOS.encodeBill(cust,{hotel:HOTEL_NAME,upi:upiId,previewBillNo:previewBillNo});
       ThermalPrinter.print(bytes).catch(function(e){
         alert('Thermal print failed: '+e.message+'\n\nTip: Configure transport in Users → Thermal Printer Settings, or use PDF/JPEG instead.');
       });
