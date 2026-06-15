@@ -107,7 +107,9 @@ const __thermalGlobal = {};
     var hotel = opts.hotel || 'Gavthan';
     var upi   = opts.upi || '';
     var billNo = cust.bill_no || opts.previewBillNo;
-    var billTs = cust.bill_time || cust.date || new Date().toISOString();
+    // Immutable official Bill Date & Time — settled_at is the single source of truth
+    // (see billDateTime in app.js); falls back to the order date for unsettled previews.
+    var billTs = cust.settled_at || cust.date || new Date().toISOString();
 
     var items = cust.items || [];
     var raw = tot(items);
