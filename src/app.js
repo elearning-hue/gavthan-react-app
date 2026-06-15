@@ -329,6 +329,12 @@ function itemTimes(it){
 // Format a specific ISO timestamp (used for bill date — may be backdated)
 function dateOf(iso){return new Date(iso).toLocaleDateString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric'});}
 function timeOf(iso){return new Date(iso).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});}
+// The official, IMMUTABLE "Bill Date & Time" printed on every invoice surface
+// (on-screen preview, WhatsApp/SMS text, PDF/JPEG/thermal/print, history & manager).
+// settled_at is the single source of truth: frozen once at settle to the settle
+// moment for normal bills, or the manually chosen backdate for backdated bills.
+// Unsettled previews fall back to the order date until the bill is settled.
+function billDateTime(c){return (c&&(c.settled_at||c.date))||null;}
 function isAdminEmail(email){return ADMIN_EMAILS.indexOf((email||'').toLowerCase())!==-1;}
 function initCap(s){return(s||'').toLowerCase().replace(/\b\w/g,function(c){return c.toUpperCase();});}
 function todayCount(custs){var t=new Date().toDateString();return custs.filter(function(c){return new Date(c.date).toDateString()===t;}).length;}
@@ -394,6 +400,8 @@ function SetupScreen(){
     +"create table if not exists mh_menu(id text primary key,cat text,name text,price integer);\n"
     +"create table if not exists mh_customers(id text primary key,name text,room text,phone text default '',date timestamptz default now(),added_by text,items jsonb default '[]',status text default 'active',settled_at timestamptz,created_at timestamptz default now());\n"
     +"create table if not exists mh_users(id text primary key,email text,display_name text,role text default 'user',active boolean default true,created_at timestamptz default now());\n"
+    +"-- Bill date columns: date=order/chosen-backdate; settled_at=IMMUTABLE official\n"
+    +"-- Bill Date & Time and single source of truth (settle moment, or chosen backdate).\n"
     +"alter table mh_categories disable row level security;\n"
     +"alter table mh_menu disable row level security;\n"
     +"alter table mh_customers disable row level security;\n"
@@ -801,16 +809,13 @@ function App(props){
       alert('A Reason is required when Discount or Adjustment is applied. Please fill the Reason field.');return;
     }
     if(!confirm('Settle this customer?'))return;
-    var now=new Date().toISOString();
-    // bill_time = printed bill date. For backdated orders, keep the order's historical
-    // calendar day (with current time-of-day); for same-day orders it's just now.
-    var billStamp=(function(){
-      var n=new Date();
-      var base=cust.date?new Date(cust.date):n;
-      if(base.toDateString()===n.toDateString())return now;
-      return new Date(base.getFullYear(),base.getMonth(),base.getDate(),
-        n.getHours(),n.getMinutes(),n.getSeconds()).toISOString();
-    })();
+    // settled_at = the official, immutable "Bill Date & Time" and single source of
+    // truth. Frozen ONCE here and never recomputed:
+    //   • backdated order  → lock to the manually chosen creation date (cust.date)
+    //   • same-day order   → the settle moment (now)
+    var orderDate=cust.date?new Date(cust.date):new Date();
+    var isBackdated=orderDate.toDateString()!==new Date().toDateString();
+    var settledAt=isBackdated?orderDate.toISOString():new Date().toISOString();
     // Assign a sequential bill number from the mh_config counter
     supa.from('mh_config').select('data').eq('id','app').maybeSingle()
       .then(function(r){
@@ -820,7 +825,7 @@ function App(props){
         return supa.from('mh_config').upsert({id:'app',data:cfg}).then(function(){return nextNo;});
       })
       .then(function(nextNo){
-        return supa.from('mh_customers').update({status:'settled',settled_at:now,bill_time:billStamp,bill_no:nextNo}).eq('id',cid);
+        return supa.from('mh_customers').update({status:'settled',settled_at:settledAt,bill_no:nextNo}).eq('id',cid);
       })
       .then(function(r){if(r.error)throw new Error(sbErr(r.error));return fetchAll();})
       .then(function(){if(selId===cid)setSelId(null);})
@@ -1364,7 +1369,7 @@ function HistoryTab(props){
               h('div',{className:'row',style:{gap:4}},h('span',{style:{fontWeight:700,color:'#B45309'}},'₹'+t),
                 h('button',{className:'btn xs',onClick:function(){setBillId(c.id);}},'🧾 Bill'))
             ),
-            h('div',{className:'row',style:{gap:5}},h('span',{className:'muted',style:{fontSize:10}},fmtDT(c.date)),h('span',{className:'tag-s'},'Settled'),c.bill_no&&h('span',{style:{fontSize:10,fontWeight:700,color:'#B45309'}},fmtBill(c.bill_no))),
+            h('div',{className:'row',style:{gap:5}},h('span',{className:'muted',style:{fontSize:10}},fmtDT(billDateTime(c))),h('span',{className:'tag-s'},'Settled'),c.bill_no&&h('span',{style:{fontSize:10,fontWeight:700,color:'#B45309'}},fmtBill(c.bill_no))),
             h('div',{style:{fontSize:11,color:'var(--text-2)'}},c.items.slice(0,3).map(function(i){return i.name+'×'+i.qty;}).join(', ')+(c.items.length>3?', …':'')),
             (c.discount_on||c.adjustment_on)&&c.reason&&h('div',{style:{fontSize:11,color:'#B45309',fontStyle:'italic'}},'Reason: '+c.reason)
           );
@@ -1580,7 +1585,7 @@ function HistoryTab(props){
             )
           ),
           h('div',{className:'row',style:{gap:5,flexWrap:'wrap'}},
-            c.settled_at&&h('span',{className:'muted',style:{fontSize:10}},fmtDT(c.settled_at||c.date)),c.bill_no&&h('span',{style:{fontSize:10,fontWeight:700,color:'#B45309'}},fmtBill(c.bill_no)),
+            c.settled_at&&h('span',{className:'muted',style:{fontSize:10}},fmtDT(billDateTime(c))),c.bill_no&&h('span',{style:{fontSize:10,fontWeight:700,color:'#B45309'}},fmtBill(c.bill_no)),
             h('span',{className:'tag-s'},'Settled'),
             sn&&h('span',{style:{fontSize:10,color:'var(--text-2)'}},'by '+sn)
           ),
@@ -2269,7 +2274,8 @@ function BillModal(props){
     lines.push('');
     lines.push('Customer: *'+cust.name+'*');
     lines.push('Room/Table: *'+cust.room+'*');
-    lines.push('Date: '+dateOf(cust.date)+'   Time: '+timeOf(cust.date));
+    var billTs=billDateTime(cust)||cust.date;
+    lines.push('Date: '+dateOf(billTs)+'   Time: '+timeOf(billTs));
     if(cust.phone) lines.push('Phone: '+cust.phone);
     lines.push('');
     // Monospace table — WhatsApp renders triple-backtick blocks in fixed-width font
@@ -2325,7 +2331,6 @@ function BillModal(props){
 
   function sendWhatsApp(){
     if(t===0){alert('Cannot send a zero-amount bill. Add items first.');return;}
-    stampBillTime();
     ensurePhone(function(phone){
       // wa.me with phone → opens WhatsApp with that contact pre-selected
       // (Web Share API with image looked nicer but didn't pre-fill recipient)
@@ -2342,29 +2347,8 @@ function BillModal(props){
       window.location.href=url;
     });
   }
-  function stampBillTime(){
-    // The bill's printed date must reflect the ORDER's historical date for backdated
-    // bills, not "today". So: if the order date (cust.date) falls on a different
-    // calendar day than today, keep that historical day and only set the time-of-day
-    // to now. For same-day orders, stamp the full current datetime (print moment).
-    var now=new Date();
-    var base=cust.date?new Date(cust.date):now;
-    var sameDay=base.toDateString()===now.toDateString();
-    var stamp;
-    if(sameDay){
-      stamp=now;
-    } else {
-      // historical date + current time-of-day
-      stamp=new Date(base.getFullYear(),base.getMonth(),base.getDate(),
-        now.getHours(),now.getMinutes(),now.getSeconds());
-    }
-    var iso=stamp.toISOString();
-    cust.bill_time=iso;
-    if(updateCustomer) updateCustomer(cust.id,{bill_time:iso});
-  }
   function printBill(){
     if(t===0){alert('Cannot print a zero-amount bill. Add items first.');return;}
-    stampBillTime();
     var bill=buildBillHTML();
     var title=(cust.name||'Bill').replace(/[^a-zA-Z0-9]/g,'')+'_'+t;
     // Strip @page/@media print from the embedded css — we re-apply @page at the top of fullCss.
@@ -2386,8 +2370,8 @@ function BillModal(props){
       if(cust.adjustment_on&&aA!==0) breakdown+='<div class="sl"><span>Adjustment</span><span>'+(aA>0?'+':'')+'&#8377;'+aA+'</span></div>';
       if(cust.reason) breakdown+='<div class="sl" style="color:#666;font-style:italic"><span>Reason:</span><span>'+escHtml(cust.reason)+'</span></div>';
     }
-    // Date/time shown on the bill = bill_time (generation time) if set, else order creation date
-    var billTs=cust.bill_time||cust.date;
+    // Date/time shown on the bill = the immutable official Bill Date & Time (see billDateTime)
+    var billTs=billDateTime(cust)||cust.date;
     var body='<h2>GAVTHAN</h2><div class="sub">Receipt / Bill'+(displayBillNo?' '+fmtBill(displayBillNo):'')+'</div><div class="inf"><span><b>'+escHtml(cust.name)+'</b></span><span>'+escHtml(dateOf(billTs))+'</span></div><div class="inf"><span>Room/Table: <b>'+escHtml(cust.room)+'</b></span><span>'+escHtml(timeOf(billTs))+'</span></div>'+(cust.phone?'<div class="inf"><span>Ph: '+escHtml(cust.phone)+'</span></div>':'')+'<hr><table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amt</th></tr></thead><tbody>'+rows+'</tbody></table><hr>'+breakdown+'<div class="tot"><span>TOTAL</span><span>&#8377;'+t+'</span></div>'+(UPI_ID?'<hr><div style="text-align:center;font-size:11px;margin-top:6px"><b>Pay via UPI</b><br/>'+escHtml(UPI_ID)+'<br/>Amount: &#8377;'+t+'</div>':'')+'<div class="foot">Thank you for visiting Gavthan!<br>Please come again.</div>';
     return {css:css,body:body};
   }
@@ -2429,7 +2413,6 @@ function BillModal(props){
   // print/JPEG), rasterizes via html2canvas, hands the canvas to onDone. Used by both
   // saveJPEG and savePDF so the two outputs are pixel-identical.
   function renderBillCanvas(onDone,onErr){
-    stampBillTime();
     var bill=buildBillHTML();
     var iframe=document.createElement('iframe');
     iframe.style.cssText='position:fixed;left:-9999px;top:0;width:380px;height:1200px;border:0;background:#fff';
@@ -2450,7 +2433,6 @@ function BillModal(props){
   }
   function thermalPrint(){
     if(t===0){alert('Cannot print a zero-amount bill.');return;}
-    stampBillTime();
     try{
       var bytes=ESCPOS.encodeBill(cust,{hotel:HOTEL_NAME,upi:UPI_ID,previewBillNo:previewBillNo});
       ThermalPrinter.print(bytes).catch(function(e){
@@ -2487,7 +2469,7 @@ function BillModal(props){
         ),
         h('div',{ref:billRef,className:'receipt',style:{background:'#fff',padding:'4px 0'}},
         h('div',{style:{textAlign:'center',marginBottom:12}},h('div',{style:{fontSize:18,fontWeight:700,letterSpacing:3}},'GAVTHAN'),h('div',{style:{fontSize:11,color:'var(--text-2)'}},'Receipt / Bill')),
-        h('div',{style:{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:2}},h('b',null,cust.name),h('span',null,dateOf(cust.date))),
+        h('div',{style:{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:2}},h('b',null,cust.name),h('span',null,dateOf(billDateTime(cust)||cust.date))),
         h('div',{style:{fontSize:12,marginBottom:2}},'Room/Table: ',h('b',null,cust.room)),
         cust.phone&&h('div',{style:{fontSize:12,marginBottom:4}},'Ph: ',h('b',null,cust.phone)),
         h('div',{className:'hr'}),
