@@ -6,11 +6,14 @@ import { defineConfig } from 'vite';
 //
 // base: GitHub Pages serves a project repo under /<repo>/, so when building for the
 // gh-pages deploy we set base to the repo subpath. Vercel (and local) serve from /,
-// so base stays '/'. The `deploy` script sets DEPLOY_TARGET=gh-pages.
+// so base stays '/'. Capacitor (Android) loads the built bundle via a custom scheme
+// that needs RELATIVE paths so index.html can resolve sibling assets/. The `deploy`
+// script sets DEPLOY_TARGET=gh-pages; the `android:build` script sets DEPLOY_TARGET=android.
 const isGhPages = process.env.DEPLOY_TARGET === 'gh-pages';
+const isAndroid = process.env.DEPLOY_TARGET === 'android';
 
 export default defineConfig({
-  base: isGhPages ? '/gavthan-react-app/' : '/',
+  base: isAndroid ? './' : (isGhPages ? '/gavthan-react-app/' : '/'),
   server: {
     port: 5173,
     host: true,

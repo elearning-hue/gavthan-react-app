@@ -12,9 +12,15 @@
     "build": "vite build",
     "preview": "vite preview",
     "predeploy": "cross-env DEPLOY_TARGET=gh-pages vite build",
-    "deploy": "gh-pages -d dist -b gh-pages"
+    "deploy": "gh-pages -d dist -b gh-pages",
+    "android:build": "cross-env DEPLOY_TARGET=android vite build",
+    "android:sync": "npm run android:build && cap sync android",
+    "android:open": "npm run android:sync && cap open android",
+    "android:run": "npm run android:sync && cap run android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
     "@supabase/supabase-js": "^2.45.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.1",
@@ -24,6 +30,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.4.1",
     "cross-env": "^7.0.3",
     "gh-pages": "^6.1.1",
     "vite": "^5.4.0"

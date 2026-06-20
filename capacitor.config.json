@@ -1,0 +1,12 @@
+{
+  "appId": "com.gavthan.billing",
+  "appName": "Gavthan Billing",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

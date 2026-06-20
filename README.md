@@ -86,6 +86,52 @@ as-is). The app then loads at `https://<user>.github.io/gavthan-react-app/`.
 
 
 
+## Android app (Capacitor)
+
+The web app is also packaged as a native Android app via [Capacitor](https://capacitorjs.com).
+The `android/` folder is a real Android Studio project that wraps the Vite build inside
+a WebView. App id is `com.gavthan.billing`, app name "Gavthan Billing".
+
+### One-time setup
+
+Install [Android Studio](https://developer.android.com/studio) (it brings the SDK,
+platform tools, and emulator) and JDK 17. Open Android Studio once so it finishes
+its first-run download.
+
+### Build / run
+
+```bash
+npm install
+npm run android:sync   # vite build (relative paths) + cap sync android
+npm run android:open   # opens the android/ project in Android Studio
+# OR
+npm run android:run    # builds + syncs + runs on a connected device/emulator
+```
+
+From Android Studio you can click **Run** to install on an emulator/device, or
+**Build → Generate Signed Bundle / APK** to produce a release `.aab`/`.apk` for
+the Play Store.
+
+### What changes in the Android build
+
+- `vite.config.js` uses `base: './'` when `DEPLOY_TARGET=android` so the bundled
+  `index.html` resolves sibling `assets/` via relative paths inside the WebView.
+- `android:scheme: https` keeps the WebView origin stable for Supabase auth and
+  `localStorage`.
+- The same React UI runs unchanged — Print / Save PDF / Save Image use the
+  browser engine (Chromium WebView). Saved files land in the system Download
+  folder via Android's download manager. (For tighter integration you can later
+  add `@capacitor/filesystem` and `@capacitor/share`, but the basic wrapper
+  works out of the box.)
+
+### Releasing to the Play Store
+
+1. `npm run android:sync`
+2. In Android Studio: **Build → Generate Signed Bundle / APK → Android App Bundle**.
+3. Create or reuse a release keystore. **Store the keystore safely** — losing it
+   means you can never update the listing.
+4. Upload the `.aab` to the Play Console.
+
 ## Notes / follow-ups
 
 - `app.js` is one large module (the original monolith body). It builds and runs

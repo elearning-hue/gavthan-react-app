@@ -7,6 +7,19 @@ dist
 *.log
 .vite
 
+# Android (Capacitor) build artifacts — the native android/ project is checked in,
+# but generated build output, IDE files, and the copied web assets are not.
+android/.gradle
+android/build
+android/app/build
+android/app/release
+android/.idea
+android/local.properties
+android/captures
+android/app/src/main/assets/public
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+
 # IMPORTANT: package-lock.json is intentionally NOT ignored.
 # Committing it makes builds reproducible across machines and on Vercel
 # (npm ci requires it). Do not add it here.

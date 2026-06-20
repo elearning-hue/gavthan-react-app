@@ -2293,7 +2293,19 @@ function BillModal(props){
   var _editN=useState(cust.name||'');var editName=_editN[0];var setEditName=_editN[1];
   var _editP=useState(cust.phone||'');var editPhone=_editP[0];var setEditPhone=_editP[1];
   var _edited=useState(false);var edited=_edited[0];var setEdited=_edited[1];
+  // Print menu — single "Print" header button opens a popover with Print / Save PDF / Save Image
+  var _printOpen=useState(false);var printOpen=_printOpen[0];var setPrintOpen=_printOpen[1];
   var billRef=React.useRef(null);
+  var printMenuRef=React.useRef(null);
+  // Close the print popover when clicking outside it
+  useEffect(function(){
+    if(!printOpen) return;
+    function onDocClick(e){
+      if(printMenuRef.current && !printMenuRef.current.contains(e.target)) setPrintOpen(false);
+    }
+    document.addEventListener('mousedown',onDocClick);
+    return function(){document.removeEventListener('mousedown',onDocClick);};
+  },[printOpen]);
 
   function saveEdits(){
     var nm=editName.trim();
@@ -2397,12 +2409,16 @@ function BillModal(props){
     var cleanCss=bill.css
       .replace(/@page\s*\{[^}]*\}/g,'')
       .replace(/@media\s+print\s*\{[^}]*\}/g,'');
-    var fullCss='@page{size:80mm auto;margin:3mm}'+cleanCss;
+    // margin:0 on @page → zero left/right (and top/bottom) paper margin, so the bill
+    // hugs the edges of the receipt roll. Vertical breathing room is handled inside body.
+    var fullCss='@page{size:80mm auto;margin:0}'+cleanCss;
     printInNewWindow(title,fullCss,bill.body);
   }
   // Builds the receipt HTML used by both Print and JPEG export (identical layout)
   function buildBillHTML(){
-    var css='*{box-sizing:border-box}body{font-family:"Courier New",monospace;font-size:12px;padding:14px;max-width:320px;margin:0 auto}h2{text-align:center;font-size:18px;letter-spacing:3px;margin-bottom:2px}.sub{text-align:center;font-size:11px;color:#666;margin-bottom:12px;border-bottom:1px dashed #ccc;padding-bottom:8px}.inf{display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px}hr{border:1px dashed #bbb;margin:7px 0}table{width:100%;border-collapse:collapse;font-size:12px}th{padding:3px 0;border-bottom:1px solid #999;text-align:left;font-weight:bold}th:not(:first-child),td:not(:first-child){text-align:right}td{padding:3px 0;border-bottom:1px dotted #eee}.sl{display:flex;justify-content:space-between;font-size:11px;margin:2px 0}.tot{display:flex;justify-content:space-between;font-size:15px;font-weight:bold;padding-top:8px;border-top:2px solid #333;margin-top:6px}.foot{text-align:center;font-size:11px;color:#666;margin-top:14px;border-top:1px dashed #ccc;padding-top:8px}';
+    // body: padding:10px 0 → vertical breathing room only, 0 horizontal so the bill
+    // uses the full paper/image width. max-width/margin:auto removed for the same reason.
+    var css='*{box-sizing:border-box}body{font-family:"Courier New",monospace;font-size:12px;padding:10px 0;margin:0;width:100%}h2{text-align:center;font-size:18px;letter-spacing:3px;margin-bottom:2px}.sub{text-align:center;font-size:11px;color:#666;margin-bottom:12px;border-bottom:1px dashed #ccc;padding-bottom:8px}.inf{display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px}hr{border:1px dashed #bbb;margin:7px 0}table{width:100%;border-collapse:collapse;font-size:12px}th{padding:3px 0;border-bottom:1px solid #999;text-align:left;font-weight:bold}th:not(:first-child),td:not(:first-child){text-align:right}td{padding:3px 0;border-bottom:1px dotted #eee}.sl{display:flex;justify-content:space-between;font-size:11px;margin:2px 0}.tot{display:flex;justify-content:space-between;font-size:15px;font-weight:bold;padding-top:8px;border-top:2px solid #333;margin-top:6px}.foot{text-align:center;font-size:11px;color:#666;margin-top:14px;border-top:1px dashed #ccc;padding-top:8px}';
     var rows=cust.items.map(function(i){return'<tr><td>'+escHtml(i.name)+'</td><td>'+(Number(i.qty)||0)+'</td><td>&#8377;'+(Number(i.price)||0)+'</td><td>&#8377;'+((Number(i.price)||0)*(Number(i.qty)||0))+'</td></tr>';}).join('');
     var dA=discountAmt(cust),aA=adjustAmt(cust);
     var breakdown='';
@@ -2487,9 +2503,15 @@ function BillModal(props){
   return h('div',{className:'ovl',onClick:onClose},
     h('div',{className:'modal',onClick:function(e){e.stopPropagation();}},
       h('div',{className:'mhdr'},h('span',{style:{fontWeight:700,fontSize:13}},'Bill — '+cust.name),h('div',{className:'row',style:{gap:5,flexWrap:'wrap'}},
-        h('button',{className:'btn btn-a xs',onClick:printBill},'🖨 Print'),
-        h('button',{className:'btn xs',onClick:saveJPEG},'🖼 JPEG'),
-        h('button',{className:'btn xs',style:{background:'#B91C1C',color:'#fff',borderColor:'#B91C1C'},onClick:savePDF},'📄 PDF'),
+        // Single Print button → popover with Print / Save PDF / Save Image
+        h('div',{ref:printMenuRef,style:{position:'relative'}},
+          h('button',{className:'btn btn-a xs',onClick:function(){setPrintOpen(function(v){return !v;});},'aria-haspopup':'menu','aria-expanded':printOpen?'true':'false'},'🖨 Print ▾'),
+          printOpen&&h('div',{role:'menu',style:{position:'absolute',top:'calc(100% + 4px)',right:0,minWidth:170,background:'var(--surface)',border:'1px solid var(--border)',borderRadius:8,boxShadow:'var(--shadow-lg,0 6px 18px rgba(0,0,0,.18))',padding:4,zIndex:10,display:'flex',flexDirection:'column',gap:2}},
+            h('button',{className:'btn xs',style:{justifyContent:'flex-start',background:'transparent',border:'none',padding:'8px 10px'},onClick:function(){setPrintOpen(false);printBill();}},'🖨 Print'),
+            h('button',{className:'btn xs',style:{justifyContent:'flex-start',background:'transparent',border:'none',padding:'8px 10px'},onClick:function(){setPrintOpen(false);savePDF();}},'📄 Save PDF'),
+            h('button',{className:'btn xs',style:{justifyContent:'flex-start',background:'transparent',border:'none',padding:'8px 10px'},onClick:function(){setPrintOpen(false);saveJPEG();}},'🖼 Save Image')
+          )
+        ),
         h('button',{className:'btn xs',style:{background:'#0F766E',color:'#fff',borderColor:'#0F766E'},onClick:thermalPrint},'🧾 Thermal'),
         h('button',{className:'btn xs',style:{background:'#25D366',color:'#fff',borderColor:'#25D366'},onClick:sendWhatsApp},'📱 WhatsApp'),
         h('button',{className:'btn xs',style:{background:'#2563eb',color:'#fff',borderColor:'#2563eb'},onClick:sendSMS},'💬 SMS'),
