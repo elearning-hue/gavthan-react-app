@@ -532,6 +532,19 @@ select{appearance:none;-webkit-appearance:none;
   --border:#e0ddd6;--primary:#b45309;
 }
 
+/* CURRENT ORDER mini-receipt — warm cream panel in BOTH themes. Like .receipt,
+   it pins its text/border tokens locally so the item names, subtotal and totals
+   (which inherit --text) stay dark and legible on the cream background even when
+   the app is in dark mode — otherwise they inherit the light dark-mode --text and
+   become invisible on the cream. */
+.cur-order{
+  background:#FAEEDA;color:#211e1a;
+  padding:8px 10px;border-radius:8px;margin-bottom:6px;
+  --surface:#fff;--surface-2:#f3e7cf;--surface-3:#efe2c6;
+  --text:#211e1a;--text-2:#6f6a62;--text-3:#9a948b;
+  --border:#e6d8bd;--primary:#b45309;
+}
+
 /* ── Dark-mode fixups for views with hard-coded light gradients ──────────── */
 :root[data-theme="dark"] .mi-pick{
   background:linear-gradient(135deg,#2a2113,#241c12);
