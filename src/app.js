@@ -985,6 +985,14 @@ function App(props){
     supa.auth.signOut().then(function(){setTab('orders');setSelId(null);setBillId(null);});
   }
 
+  // Resolve effective admin status BEFORE computing the visible orders list.
+  // DB role (mh_users.role) takes precedence over the hardcoded GH_ADMINS list so
+  // that ALL admins — seeded admins AND role-promoted admins — see every active
+  // order, not just their own. (Without this ordering, a role-promoted admin would
+  // fall through to the staff filter below because `admin` was still false here.)
+  if(myUser&&myUser.role==='admin') admin=true;
+  if(myUser&&myUser.role==='user') admin=false;
+
   var active=admin
     ? custs.filter(function(c){return c.status==='active';})
     : custs.filter(function(c){return c.status==='active'&&c.added_by===user.email;});
@@ -1003,9 +1011,6 @@ function App(props){
         setPreviewBillNo((Number(cfg.lastBillNo)||0)+1);
       },function(){setPreviewBillNo(null);});
   },[billId]);
-  // Dynamic admin: DB role takes precedence over hardcoded list
-  if(myUser&&myUser.role==='admin') admin=true;
-  if(myUser&&myUser.role==='user') admin=false;
 
   var displayName=initCap(
     (myUser&&myUser.display_name) ||
@@ -1143,7 +1148,7 @@ function OrderPanel(props){
     ),
     // ── Visible section divider between menu picker and current bill ──
     cust.items.length>0&&h('div',{style:{borderTop:'2px dashed #B45309',marginTop:10,marginBottom:6,paddingTop:8}}),
-    cust.items.length>0&&h('div',{style:{background:'#FAEEDA',padding:'8px 10px',borderRadius:8,marginBottom:6}},
+    cust.items.length>0&&h('div',{className:'cur-order'},
       h('div',{style:{fontSize:11,color:'#27500A',fontWeight:700,letterSpacing:0.5,marginBottom:6}},'🧾 CURRENT ORDER'),
       h('div',{className:'sb'},cust.items.map(function(it){
         var tms=itemTimes(it);
@@ -2383,15 +2388,68 @@ function BillModal(props){
     cb(clean);
   }
 
+  // Short text caption that rides alongside the bill image. The full itemised bill
+  // is in the JPEG; the caption keeps the tappable UPI pay link so the customer can
+  // still pay in one tap (an image's UPI link is not clickable).
+  function billCaption(){
+    var lines=['*GAVTHAN*'+(displayBillNo?'  '+fmtBill(displayBillNo):'')];
+    lines.push('Bill for *'+cust.name+'* — Total: ₹'+t);
+    if(upiId){
+      var amt=Math.round(Number(t));
+      var upiLink='upi://pay?pa='+upiId
+        +'&pn='+encodeURIComponent(HOTEL_NAME)
+        +'&am='+amt
+        +'&cu=INR'
+        +'&tn='+encodeURIComponent(HOTEL_NAME+' bill');
+      lines.push('💳 Pay ₹'+amt+' instantly: '+upiLink);
+    }
+    lines.push('Thank you for visiting Gavthan!');
+    return lines.join('\n');
+  }
+
+  // Fallback when the native share sheet (Web Share API with files) isn't available
+  // — typically desktop browsers. Saves the JPEG locally and opens WhatsApp at the
+  // customer's number with the caption, so the user can attach the just-saved image.
+  function whatsAppFallback(blob,fname,caption){
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;a.download=fname;
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    setTimeout(function(){URL.revokeObjectURL(url);},1000);
+    ensurePhone(function(phone){
+      var waPhone=phone.length===10?'91'+phone:phone;
+      var text=caption+'\n\n(Bill image saved to your device — attach it to this chat.)';
+      window.open('https://wa.me/'+waPhone+'?text='+encodeURIComponent(text),'_blank');
+    });
+  }
+
+  // Send the bill via WhatsApp as a structured JPEG image (identical layout to the
+  // Print / Save Image output) instead of unaligned, device-dependent text. On
+  // mobile / PWA / the Capacitor WebView this opens the native share sheet with the
+  // image attached; the user picks WhatsApp and the recipient.
   function sendWhatsApp(){
     if(t===0){alert('Cannot send a zero-amount bill. Add items first.');return;}
-    ensurePhone(function(phone){
-      // wa.me with phone → opens WhatsApp with that contact pre-selected
-      // (Web Share API with image looked nicer but didn't pre-fill recipient)
-      var waPhone=phone.length===10?'91'+phone:phone;
-      var url='https://wa.me/'+waPhone+'?text='+encodeURIComponent(billText());
-      window.open(url,'_blank');
-    });
+    if(typeof html2canvas==='undefined'){alert('Image library not loaded. Check your internet connection and reload.');return;}
+    renderBillCanvas(function(canvas){
+      var fname=(cust.name||'Bill').replace(/[^a-zA-Z0-9]/g,'')+'_'+t+'.jpg';
+      var caption=billCaption();
+      canvas.toBlob(function(blob){
+        if(!blob){alert('Could not generate the bill image.');return;}
+        var file=new File([blob],fname,{type:'image/jpeg'});
+        // Preferred path: native share sheet with the JPEG attached.
+        if(navigator.canShare&&navigator.canShare({files:[file]})){
+          navigator.share({files:[file],title:'Gavthan Bill',text:caption})
+            .catch(function(err){
+              // User dismissed the share sheet → leave it; any real failure → fallback.
+              if(err&&err.name==='AbortError')return;
+              whatsAppFallback(blob,fname,caption);
+            });
+          return;
+        }
+        // Desktop / Web Share unsupported → save image + open WhatsApp with caption.
+        whatsAppFallback(blob,fname,caption);
+      },'image/jpeg',0.92);
+    },function(e){alert('Bill image export failed: '+e.message);});
   }
 
   function sendSMS(){
