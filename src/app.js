@@ -1142,7 +1142,7 @@ function OrderPanel(props){
           h('span',{className:'mi-price'},'₹'+mi.price),
           inO&&h('button',{className:'qb',onClick:function(e){e.stopPropagation();upsertItem(cust.id,mi.id,-1);}},'−'),
           inO&&h('span',{className:'mi-qty'},inO.qty),
-          h('button',{className:'qb',style:{background:'#B45309',color:'#fff',border:'none'},onClick:function(e){e.stopPropagation();upsertItem(cust.id,mi.id,1);}},'+')
+          h('button',{className:'qb qb-add',onClick:function(e){e.stopPropagation();upsertItem(cust.id,mi.id,1);}},'+')
         );
       })
     ),
