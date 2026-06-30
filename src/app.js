@@ -1149,7 +1149,7 @@ function OrderPanel(props){
     // ── Visible section divider between menu picker and current bill ──
     cust.items.length>0&&h('div',{style:{borderTop:'2px dashed #B45309',marginTop:10,marginBottom:6,paddingTop:8}}),
     cust.items.length>0&&h('div',{className:'cur-order'},
-      h('div',{style:{fontSize:11,color:'#27500A',fontWeight:700,letterSpacing:0.5,marginBottom:6}},'🧾 CURRENT ORDER'),
+      h('div',{style:{fontSize:11,color:'var(--green)',fontWeight:700,letterSpacing:0.5,marginBottom:6}},'🧾 CURRENT ORDER'),
       h('div',{className:'sb'},cust.items.map(function(it){
         var tms=itemTimes(it);
         return h('div',{key:it.id,className:'li'},
@@ -1170,15 +1170,15 @@ function OrderPanel(props){
       // Working breakdown (staff screen only)
       h('div',{style:{paddingTop:5,fontSize:12}},
         h('div',{className:'row bw'},h('span',{className:'muted'},'Items subtotal'),h('span',null,'₹'+raw)),
-        dAmt>0&&h('div',{className:'row bw',style:{color:'#166534'}},
+        dAmt>0&&h('div',{className:'row bw',style:{color:'var(--green)'}},
           h('span',null,'Discount ('+cust.discount_pct+'%)'),h('span',null,'-₹'+dAmt)
         ),
-        cust.adjustment_on&&aAmt!==0&&h('div',{className:'row bw',style:{color:(aAmt<0?'#166534':'#991B1B')}},
+        cust.adjustment_on&&aAmt!==0&&h('div',{className:'row bw',style:{color:(aAmt<0?'var(--green)':'var(--red)')}},
           h('span',null,'Adjustment'),h('span',null,(aAmt>0?'+':'')+'₹'+aAmt)
         ),
         h('div',{className:'row bw',style:{fontWeight:700,fontSize:14,paddingTop:3,borderTop:'1px solid var(--border)',marginTop:3}},
           h('span',null,'Total'),
-          h('span',{style:{color:grand===0?'#991B1B':'#B45309'}},'₹'+grand)
+          h('span',{style:{color:grand===0?'var(--red)':'var(--primary)'}},'₹'+grand)
         )
       )
     ),
