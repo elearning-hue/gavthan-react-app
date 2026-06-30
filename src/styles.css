@@ -553,18 +553,20 @@ select{appearance:none;-webkit-appearance:none;
   --border:#e0ddd6;--primary:#b45309;
 }
 
-/* CURRENT ORDER mini-receipt — warm cream panel in BOTH themes. Like .receipt,
-   it pins its text/border tokens locally so the item names, subtotal and totals
-   (which inherit --text) stay dark and legible on the cream background even when
-   the app is in dark mode — otherwise they inherit the light dark-mode --text and
-   become invisible on the cream. */
+/* CURRENT ORDER — the running-bill summary inside an open order. A clean,
+   theme-aware "well": a subtle inset surface + hairline border so it reads as a
+   distinct grouped panel, with a soft primary top-accent for bill identity. Text
+   follows the real --text token, so it stays legible in BOTH light and dark
+   (the old version pinned everything to a cream slab that glared in dark mode). */
 .cur-order{
-  background:#FAEEDA;color:#211e1a;
-  padding:8px 10px;border-radius:8px;margin-bottom:6px;
-  --surface:#fff;--surface-2:#f3e7cf;--surface-3:#efe2c6;
-  --text:#211e1a;--text-2:#6f6a62;--text-3:#9a948b;
-  --border:#e6d8bd;--primary:#b45309;
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-top:2px solid var(--primary);
+  border-radius:12px;
+  padding:11px 13px;
+  margin-bottom:8px;
 }
+.cur-order .li{border-bottom-color:var(--border)}
 
 /* ── Dark-mode fixups for views with hard-coded light gradients ──────────── */
 /* .mi-pick now uses theme tokens (--surface/--text/--green/--primary-tint), so the
