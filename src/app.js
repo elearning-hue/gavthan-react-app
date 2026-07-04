@@ -1082,7 +1082,9 @@ function OrdersTab(props){
           h('div',null,h('div',{style:{fontWeight:700}},c.name),h('div',{className:'muted',style:{fontSize:11}},c.room+(c.phone?' · '+c.phone:''))),
           h('div',{style:{textAlign:'right'}},h('div',{style:{fontWeight:700,color:'#B45309'}},'₹'+finalTotal(c)),h('div',{className:'muted',style:{fontSize:10}},fmtDT(c.date)))
         ),
-        c.id===selId&&h(OrderPanel,{cust:c,menu,cats,upsertItem,settle,delCust,setBillId,setDiscount:props.setDiscount,setAdjustment:props.setAdjustment,updateCustomer:props.updateCustomer})
+        // key=c.id → switching orders remounts the panel, resetting its local
+        // discount/adjustment/reason inputs instead of carrying over stale values.
+        c.id===selId&&h(OrderPanel,{key:c.id,cust:c,menu,cats,upsertItem,settle,delCust,setBillId,setDiscount:props.setDiscount,setAdjustment:props.setAdjustment,updateCustomer:props.updateCustomer})
       );
     })
   );
@@ -1782,6 +1784,8 @@ function MenuTab(props){
 function CustomersTab(props){
   var custs=props.custs||[];
   var _q=useState('');var q=_q[0];var setQ=_q[1];
+  var _page=useState(0);var page=_page[0];var setPage=_page[1];
+  var PAGE_SIZE=10;
 
   // Group customers by phone (or name+room if no phone)
   var map={};
@@ -1805,6 +1809,13 @@ function CustomersTab(props){
     return r.name.toLowerCase().indexOf(s)!==-1||(r.phone||'').indexOf(s)!==-1;
   }):rows;
 
+  // Pagination — same pattern as the History tab (numbered page buttons)
+  var totalPages=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE));
+  var safePage=Math.min(page,totalPages-1);
+  var pageItems=filtered.slice(safePage*PAGE_SIZE,(safePage+1)*PAGE_SIZE);
+  // Reset to page 0 when the search changes
+  useEffect(function(){setPage(0);},[q]);
+
   var totalRev=rows.reduce(function(s,r){return s+r.totalSpent;},0);
 
   return h('div',null,
@@ -1817,12 +1828,14 @@ function CustomersTab(props){
       h('div',{className:'ttl'},'Customers'),
       h('div',{className:'muted',style:{fontSize:11,marginBottom:8}},'Unique customers identified by phone number (or name+room if no phone).'),
       h('input',{placeholder:'Search by name or phone…',value:q,onChange:function(e){setQ(e.target.value);},style:{marginBottom:8}}),
+      filtered.length>PAGE_SIZE&&h('div',{className:'muted',style:{fontSize:11,marginBottom:6}},
+        'Page '+(safePage+1)+' of '+totalPages+' — '+filtered.length+' customers'),
       filtered.length===0?h('div',{className:'empty'},rows.length===0?'No customers yet.':'No matches.'):
-      filtered.map(function(r,i){
-        return h('div',{key:i,className:'li',style:{flexDirection:'column',alignItems:'stretch',gap:4,paddingBottom:8}},
+      pageItems.map(function(r,i){
+        return h('div',{key:safePage*PAGE_SIZE+i,className:'li',style:{flexDirection:'column',alignItems:'stretch',gap:4,paddingBottom:8}},
           h('div',{className:'row bw'},
             h('span',{style:{fontWeight:700,fontSize:13}},r.name),
-            h('span',{style:{fontWeight:700,color:'#B45309'}},'₹'+r.totalSpent)
+            h('span',{style:{fontWeight:700,color:'var(--primary)'}},'₹'+r.totalSpent)
           ),
           h('div',{className:'row',style:{gap:6,flexWrap:'wrap',fontSize:11,color:'var(--text-2)'}},
             r.phone&&h('span',null,'📞 '+r.phone),
@@ -1830,7 +1843,25 @@ function CustomersTab(props){
             h('span',null,'Last: '+fmtDT(r.lastVisit))
           )
         );
-      })
+      }),
+      // Pagination controls — mirrors HistoryTab: ← Prev · numbered pages · Next →
+      filtered.length>PAGE_SIZE&&h('div',{className:'row bw',style:{marginTop:10,paddingTop:8,borderTop:'1px solid var(--border)'}},
+        h('button',{className:'btn xs',onClick:function(){setPage(Math.max(0,safePage-1));},disabled:safePage===0,style:{opacity:safePage===0?0.4:1}},'← Prev'),
+        h('div',{style:{display:'flex',gap:3,flexWrap:'wrap',justifyContent:'center'}},
+          (function(){
+            var btns=[];
+            var maxBtns=Math.min(7,totalPages);
+            var start=Math.max(0,Math.min(safePage-3,totalPages-maxBtns));
+            for(var p=start;p<start+maxBtns;p++){
+              (function(pp){
+                btns.push(h('button',{key:pp,className:'btn xs'+(pp===safePage?' btn-a':''),style:{minWidth:28,padding:'4px 6px'},onClick:function(){setPage(pp);}},pp+1));
+              })(p);
+            }
+            return btns;
+          })()
+        ),
+        h('button',{className:'btn xs',onClick:function(){setPage(Math.min(totalPages-1,safePage+1));},disabled:safePage>=totalPages-1,style:{opacity:safePage>=totalPages-1?0.4:1}},'Next →')
+      )
     )
   );
 }
@@ -2555,8 +2586,10 @@ function BillModal(props){
       )),
       h('div',{className:'mbody'},
         // Editable customer details at checkout
-        h('div',{style:{background:'#FEF3E2',borderRadius:8,padding:8,marginBottom:10}},
-          h('div',{style:{fontSize:11,fontWeight:700,color:'#B45309',marginBottom:5}},'Customer Details (editable)'),
+        // Uniform theme: same panel treatment as the Order Details section (.cur-order)
+        // instead of a one-off cream slab that clashed in dark mode.
+        h('div',{className:'cur-order',style:{marginBottom:10}},
+          h('div',{style:{fontSize:11,fontWeight:700,color:'var(--primary)',marginBottom:5}},'Customer Details (editable)'),
           h('div',{style:{marginBottom:5}},
             h('div',{className:'muted',style:{fontSize:10,marginBottom:2}},'Name'),
             h('input',{value:editName,onChange:function(e){setEditName(e.target.value);setEdited(true);},placeholder:'Customer name'})
@@ -2567,7 +2600,9 @@ function BillModal(props){
           ),
           edited&&h('button',{className:'btn btn-a xs',style:{width:'100%',justifyContent:'center'},onClick:saveEdits},'💾 Save Changes')
         ),
-        h('div',{ref:billRef,className:'receipt',style:{background:'#fff',padding:'4px 0'}},
+        // Deliberate "paper card" in both themes: horizontal padding + border so the
+        // white receipt no longer sits flush/cropped against a dark modal background.
+        h('div',{ref:billRef,className:'receipt',style:{background:'#fff',padding:'12px 14px',borderRadius:10,border:'1px solid var(--border)'}},
         h('div',{style:{textAlign:'center',marginBottom:12}},h('div',{style:{fontSize:18,fontWeight:700,letterSpacing:3}},'GAVTHAN'),h('div',{style:{fontSize:11,color:'var(--text-2)'}},'Receipt / Bill')),
         h('div',{style:{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:2}},h('b',null,cust.name),h('span',null,dateOf(billDateTime(cust)||cust.date))),
         h('div',{style:{fontSize:12,marginBottom:2}},'Room/Table: ',h('b',null,cust.room)),
@@ -2669,7 +2704,10 @@ function Root(){
   }});
   if(user===undefined)return h('div',{style:{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh'}},h('span',{className:'spin'}));
   if(!user)return h(LoginScreen,null);
-  return h(App,{user:user});
+  // key=user.id → a different user signing in on the same device fully remounts
+  // App, so no stale orders/selection/bill-modal/role from the previous session
+  // linger on screen while data re-fetches.
+  return h(App,{key:user.id,user:user});
 }
 
 // Mounted from main.js entry (App root exported below)
