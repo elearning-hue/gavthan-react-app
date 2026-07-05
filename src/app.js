@@ -2501,68 +2501,17 @@ function BillModal(props){
     cb(clean);
   }
 
-  // Short text caption that rides alongside the bill image. The full itemised bill
-  // is in the JPEG; the caption keeps the tappable UPI pay link so the customer can
-  // still pay in one tap (an image's UPI link is not clickable).
-  function billCaption(){
-    var lines=['*GAVTHAN*'+(displayBillNo?'  '+fmtBill(displayBillNo):'')];
-    lines.push('Bill for *'+cust.name+'* — Total: ₹'+t);
-    if(upiId){
-      var amt=Math.round(Number(t));
-      var upiLink='upi://pay?pa='+upiId
-        +'&pn='+encodeURIComponent(HOTEL_NAME)
-        +'&am='+amt
-        +'&cu=INR'
-        +'&tn='+encodeURIComponent(HOTEL_NAME+' bill');
-      lines.push('💳 Pay ₹'+amt+' instantly: '+upiLink);
-    }
-    lines.push('Thank you for visiting Gavthan!');
-    return lines.join('\n');
-  }
-
-  // Fallback when the native share sheet (Web Share API with files) isn't available
-  // — typically desktop browsers. Saves the JPEG locally and opens WhatsApp at the
-  // customer's number with the caption, so the user can attach the just-saved image.
-  function whatsAppFallback(blob,fname,caption){
-    var url=URL.createObjectURL(blob);
-    var a=document.createElement('a');
-    a.href=url;a.download=fname;
-    document.body.appendChild(a);a.click();document.body.removeChild(a);
-    setTimeout(function(){URL.revokeObjectURL(url);},1000);
-    ensurePhone(function(phone){
-      var waPhone=phone.length===10?'91'+phone:phone;
-      var text=caption+'\n\n(Bill image saved to your device — attach it to this chat.)';
-      window.open('https://wa.me/'+waPhone+'?text='+encodeURIComponent(text),'_blank');
-    });
-  }
-
-  // Send the bill via WhatsApp as a structured JPEG image (identical layout to the
-  // Print / Save Image output) instead of unaligned, device-dependent text. On
-  // mobile / PWA / the Capacitor WebView this opens the native share sheet with the
-  // image attached; the user picks WhatsApp and the recipient.
+  // Send the properly formatted text bill to the customer on WhatsApp. Uses the
+  // number from the bill window (ensurePhone) to open a direct chat — no manual
+  // contact picking — and pre-fills billText() (bold header, itemised table, UPI
+  // pay link, thank-you).
   function sendWhatsApp(){
     if(t===0){alert('Cannot send a zero-amount bill. Add items first.');return;}
-    if(typeof html2canvas==='undefined'){alert('Image library not loaded. Check your internet connection and reload.');return;}
-    renderBillCanvas(function(canvas){
-      var fname=(cust.name||'Bill').replace(/[^a-zA-Z0-9]/g,'')+'_'+t+'.jpg';
-      var caption=billCaption();
-      canvas.toBlob(function(blob){
-        if(!blob){alert('Could not generate the bill image.');return;}
-        var file=new File([blob],fname,{type:'image/jpeg'});
-        // Preferred path: native share sheet with the JPEG attached.
-        if(navigator.canShare&&navigator.canShare({files:[file]})){
-          navigator.share({files:[file],title:'Gavthan Bill',text:caption})
-            .catch(function(err){
-              // User dismissed the share sheet → leave it; any real failure → fallback.
-              if(err&&err.name==='AbortError')return;
-              whatsAppFallback(blob,fname,caption);
-            });
-          return;
-        }
-        // Desktop / Web Share unsupported → save image + open WhatsApp with caption.
-        whatsAppFallback(blob,fname,caption);
-      },'image/jpeg',0.92);
-    },function(e){alert('Bill image export failed: '+e.message);});
+    ensurePhone(function(phone){
+      var waPhone=phone.length===10?'91'+phone:phone;
+      var url='https://wa.me/'+waPhone+'?text='+encodeURIComponent(billText());
+      window.open(url,'_blank');
+    });
   }
 
   function sendSMS(){
