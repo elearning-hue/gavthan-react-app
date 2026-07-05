@@ -442,29 +442,62 @@ function SetupScreen(){
 }
 
 // ── LOGIN SCREEN ───────────────────────────────────
-function LoginScreen(props){
-  var onLogin=props.onLogin;
-  var _mode=useState('login');var mode=_mode[0];var setMode=_mode[1];
+function LoginScreen(){
+  var LOCK_MAX=3, LOCK_MS=60*60*1000; // 3 failed attempts → lock this device for 1 hour
+  // localStorage helpers (fail-safe: private-mode / disabled storage must not crash login)
+  function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+  function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+  function lsDel(k){try{localStorage.removeItem(k);}catch(e){}}
+
   var _email=useState('');var email=_email[0];var setEmail=_email[1];
   var _pass=useState('');var pass=_pass[0];var setPass=_pass[1];
-  var _name=useState('');var name=_name[0];var setName=_name[1];
   var _err=useState('');var err=_err[0];var setErr=_err[1];
   var _busy=useState(false);var busy=_busy[0];var setBusy=_busy[1];
   var _confirmMsg=useState('');var confirmMsg=_confirmMsg[0];var setConfirmMsg=_confirmMsg[1];
+  var _showPw=useState(false);var showPw=_showPw[0];var setShowPw=_showPw[1];
+  var _lockUntil=useState(function(){return Number(lsGet('gv_login_locked_until'))||0;});var lockUntil=_lockUntil[0];var setLockUntil=_lockUntil[1];
+  var _tick=useState(0);var setTick=_tick[1];
+
+  var locked=lockUntil>Date.now();
+  var remain=Math.max(0,lockUntil-Date.now());
+
+  // Tick every second while locked so the countdown updates and self-clears on expiry.
+  useEffect(function(){
+    if(!(lockUntil>Date.now()))return;
+    var id=setInterval(function(){
+      if(Date.now()>=lockUntil){lsDel('gv_login_locked_until');lsDel('gv_login_fails');setLockUntil(0);setErr('');}
+      else setTick(function(x){return x+1;});
+    },1000);
+    return function(){clearInterval(id);};
+  },[lockUntil]);
+
+  function recordFail(){
+    var n=(Number(lsGet('gv_login_fails'))||0)+1;
+    lsSet('gv_login_fails',String(n));
+    if(n>=LOCK_MAX){var until=Date.now()+LOCK_MS;lsSet('gv_login_locked_until',String(until));setLockUntil(until);}
+    return n;
+  }
+  function clearFails(){lsDel('gv_login_fails');lsDel('gv_login_locked_until');}
+  function fmtRemain(ms){var s=Math.ceil(ms/1000);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
 
   function doAuth(){
+    if(lockUntil>Date.now())return; // locked out
     if(!email.trim()||!pass){setErr('Email and password required.');return;}
     setBusy(true);setErr('');setConfirmMsg('');
     supa.auth.signInWithPassword({email:email.trim(),password:pass})
       .then(function(r){
         if(r.error){
-          if(r.error.message.toLowerCase().indexOf('email')!==-1&&r.error.message.toLowerCase().indexOf('confirm')!==-1){
+          var m=r.error.message.toLowerCase();
+          if(m.indexOf('email')!==-1&&m.indexOf('confirm')!==-1){
+            // Unconfirmed email is a real account, not a brute-force guess — don't count it.
             setErr('Please confirm your email first. Check your inbox for the confirmation link.');
-          } else {
-            setErr(r.error.message);
+            setBusy(false);return;
           }
+          var left=LOCK_MAX-recordFail();
+          if(left>0)setErr('Incorrect email or password. '+left+' attempt'+(left!==1?'s':'')+' left before a 1-hour lock.');
           setBusy(false);return;
         }
+        clearFails(); // correct credentials → reset the failed-attempt counter
         var u=r.data.user;
         return supa.from('mh_users').select('*').eq('id',u.id).maybeSingle()
           .then(function(rr){
@@ -499,36 +532,51 @@ function LoginScreen(props){
     supa.auth.resetPasswordForEmail(em).then(function(r){
       setBusy(false);
       if(r&&r.error){setErr('Error: '+r.error.message);return;}
-      setConfirmMsg('✓ Password reset email sent to '+em+'. Check your inbox for the reset link.');
+      setConfirmMsg('Password reset email sent to '+em+'. Check your inbox for the reset link.');
     }).catch(function(e){setBusy(false);setErr(e.message);});
   }
   function onKey(e){if(e.key==='Enter')doAuth();}
 
+  // Inline (SVG) icons — no emoji, stroke-consistent, currentColor for theming.
+  function icon(kids,extra){return h('svg',Object.assign({width:20,height:20,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round','aria-hidden':'true'},extra||{}),kids);}
+  function eyeSvg(){return icon([h('path',{key:1,d:'M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z'}),h('circle',{key:2,cx:12,cy:12,r:3})]);}
+  function eyeOffSvg(){return icon([h('path',{key:1,d:'M9.88 9.88a3 3 0 1 0 4.24 4.24'}),h('path',{key:2,d:'M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.2 13.2 0 0 1-1.67 2.68'}),h('path',{key:3,d:'M6.61 6.61A13.5 13.5 0 0 0 2 12s3 7 10 7a9.7 9.7 0 0 0 5.39-1.61'}),h('line',{key:4,x1:2,x2:22,y1:2,y2:22})]);}
+  function lockSvg(){return icon([h('rect',{key:1,width:18,height:11,x:3,y:11,rx:2}),h('path',{key:2,d:'M7 11V7a5 5 0 0 1 10 0v4'})],{width:24,height:24});}
+
   return h('div',{className:'login-wrap'},
     h('div',{className:'login-box'},
       h('div',{className:'login-logo'},h('em',null,'Gavthan')),
-      h('div',{className:'login-sub'},'Staff Login'),
-      confirmMsg
-        ? h('div',null,
-            h('div',{className:'msg-ok',style:{lineHeight:1.7}},confirmMsg),
-            h('button',{className:'btn btn-a',style:{width:'100%',justifyContent:'center',marginTop:8},
-              onClick:function(){setConfirmMsg('');}},'Back to Login')
+      h('div',{className:'login-sub'}, locked?'Sign-in temporarily locked':'Restaurant billing · staff sign in'),
+      locked
+        ? h('div',{className:'lock-card',role:'alert'},
+            h('div',{className:'lock-ic'},lockSvg()),
+            h('div',{className:'lock-title'},'Too many attempts'),
+            h('div',{className:'lock-msg'},'For your security, sign-in is locked after '+LOCK_MAX+' failed attempts.'),
+            h('div',{className:'lock-timer'},fmtRemain(remain)),
+            h('div',{className:'lock-timer-lbl'},'until you can try again')
           )
-        : h('div',null,
-            err&&h('div',{className:'msg-err'},err),
-            h('div',{className:'fld'},h('label',null,'Email'),
-              h('input',{type:'email',value:email,onChange:function(e){setEmail(e.target.value);},placeholder:'you@example.com',onKeyDown:onKey})),
-            h('div',{className:'fld',style:{marginBottom:16}},h('label',null,'Password'),
-              h('input',{type:'password',value:pass,onChange:function(e){setPass(e.target.value);},placeholder:'Your password',onKeyDown:onKey})),
-            h('button',{className:'btn btn-a',style:{width:'100%',justifyContent:'center',marginBottom:8},onClick:doAuth,disabled:busy},
-              busy&&h('span',{className:'spin'}),'Login'),
-            h('div',{style:{textAlign:'center',fontSize:11,marginBottom:6}},
-              h('span',{style:{color:'#B45309',cursor:'pointer',fontWeight:600},onClick:doForgot},'Forgot password?')
-            ),
-            h('div',{style:{textAlign:'center',fontSize:11,color:'var(--text-2)'}},
-              'No account? Ask your admin to create one for you.'
+        : confirmMsg
+          ? h('div',null,
+              h('div',{className:'msg-ok',style:{lineHeight:1.7}},confirmMsg),
+              h('button',{className:'btn btn-a',style:{width:'100%',justifyContent:'center',marginTop:8},onClick:function(){setConfirmMsg('');}},'Back to sign in')
             )
-          )
+          : h('div',null,
+              err&&h('div',{className:'msg-err',role:'alert'},err),
+              h('div',{className:'fld'},h('label',{htmlFor:'lg-email'},'Email'),
+                h('input',{id:'lg-email',type:'email',autoComplete:'username',inputMode:'email',value:email,onChange:function(e){setEmail(e.target.value);},placeholder:'you@example.com',onKeyDown:onKey})),
+              h('div',{className:'fld',style:{marginBottom:18}},h('label',{htmlFor:'lg-pass'},'Password'),
+                h('div',{className:'pw-wrap'},
+                  h('input',{id:'lg-pass',type:showPw?'text':'password',autoComplete:'current-password',value:pass,onChange:function(e){setPass(e.target.value);},placeholder:'Your password',onKeyDown:onKey}),
+                  h('button',{type:'button',className:'pw-toggle','aria-label':showPw?'Hide password':'Show password',onClick:function(){setShowPw(!showPw);}},showPw?eyeOffSvg():eyeSvg())
+                )
+              ),
+              h('button',{className:'btn btn-a',style:{width:'100%',justifyContent:'center',marginBottom:10},onClick:doAuth,disabled:busy},
+                busy&&h('span',{className:'spin'}),'Sign in'),
+              h('div',{style:{textAlign:'center',fontSize:11.5,marginBottom:8}},
+                h('span',{className:'login-link',onClick:doForgot},'Forgot password?')
+              ),
+              h('div',{className:'login-foot'},'No account? Ask your admin to add you.')
+            )
     )
   );
 }

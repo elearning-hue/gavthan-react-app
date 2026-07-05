@@ -362,32 +362,77 @@ select{appearance:none;-webkit-appearance:none;
 .editrow{background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:9px;padding:9px;margin-bottom:5px}
 
 /* ── Login ──────────────────────────────────────────────────────────────── */
+/* Pre-auth screens (login / setup / reset / error) use a fixed OLED-dark,
+   content-first treatment regardless of the in-app theme. */
 .login-wrap{
   min-height:100vh;min-height:100dvh;
   display:flex;align-items:center;justify-content:center;
   background:
-    radial-gradient(900px 500px at 50% -5%, #fdf6ea 0%, transparent 55%),
-    radial-gradient(700px 500px at 100% 100%, #f1e7d6 0%, transparent 50%),
-    var(--bg);
-  padding:20px;
+    radial-gradient(680px 380px at 50% -8%, rgba(224,138,60,.10), transparent 60%),
+    radial-gradient(520px 360px at 100% 112%, rgba(37,99,235,.06), transparent 55%),
+    #08090a;
+  padding:24px;
+  color:#f4f4f5;
 }
 .login-box{
-  background:var(--surface);
-  border:1px solid var(--border);
-  border-radius:var(--radius-lg);
-  padding:30px 26px;
-  width:100%;max-width:380px;
-  box-shadow:var(--shadow-lg);
+  background:#131416;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:18px;
+  padding:32px 28px;
+  width:100%;max-width:392px;
+  box-shadow:0 24px 64px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.04);
 }
-.login-logo{text-align:center;font-size:26px;font-weight:800;margin-bottom:4px;letter-spacing:-.02em}
+.login-logo{text-align:center;font-size:27px;font-weight:800;margin-bottom:6px;letter-spacing:-.02em;color:#f4f4f5}
 .login-logo em{
-  color:var(--primary);font-style:normal;
-  background:linear-gradient(120deg,var(--primary),#d97706);
+  color:#e8944a;font-style:normal;
+  background:linear-gradient(120deg,#e8944a,#f0b06a);
   -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
 }
-.login-sub{text-align:center;font-size:12px;color:var(--text-2);margin-bottom:22px}
-.fld{margin-bottom:14px}
-.fld label{display:block;font-size:11px;font-weight:700;color:var(--text-2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
+.login-sub{text-align:center;font-size:12.5px;color:#a1a1aa;margin-bottom:26px}
+.fld{margin-bottom:15px}
+.fld label{display:block;font-size:11px;font-weight:700;color:#a1a1aa;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+/* Dark inputs, scoped to the login card (global input styles stay token-based) */
+.login-box input{
+  background:#0e0f10;border:1px solid rgba(255,255,255,.10);color:#f4f4f5;
+  border-radius:10px;min-height:46px;transition:border-color .15s,box-shadow .15s;
+}
+.login-box input::placeholder{color:#6b6b73}
+.login-box input:focus{outline:none;border-color:#e8944a;box-shadow:0 0 0 3px rgba(232,148,74,.22)}
+/* Password field with show/hide toggle */
+.pw-wrap{position:relative}
+.pw-wrap input{padding-right:46px}
+.pw-toggle{
+  position:absolute;top:0;right:0;height:100%;width:46px;
+  display:flex;align-items:center;justify-content:center;
+  background:none;border:none;cursor:pointer;color:#8b8b93;transition:color .15s;
+}
+.pw-toggle:hover{color:#f4f4f5}
+.pw-toggle:focus-visible{outline:none;color:#e8944a;box-shadow:0 0 0 3px rgba(232,148,74,.22);border-radius:8px}
+/* Login primary button — accessible dark-text-on-amber (white-on-amber fails AA) */
+.login-box .btn-a{background:#e8944a!important;border-color:#e8944a!important;color:#1a1206!important;box-shadow:none!important;min-height:46px;font-size:13px}
+.login-box .btn-a:hover{background:#efa661!important;border-color:#efa661!important}
+.login-box .btn-a:disabled{opacity:.5}
+.login-link{color:#e8944a;cursor:pointer;font-weight:600;transition:color .15s}
+.login-link:hover{color:#f0b06a}
+.login-foot{text-align:center;font-size:11.5px;color:#8b8b93}
+/* Message chips scoped to the dark login card (global .msg-* unchanged) */
+.login-box .msg-err{background:rgba(220,38,38,.12);color:#fca5a5;border-color:rgba(248,113,113,.28)}
+.login-box .msg-ok{background:rgba(5,150,105,.12);color:#6ee7b7;border-color:rgba(52,211,153,.28)}
+.login-box .setup-banner{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.09);color:#c9c9cf}
+/* Lockout state */
+.lock-card{text-align:center;padding:6px 2px 2px}
+.lock-ic{
+  width:48px;height:48px;margin:0 auto 14px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(220,38,38,.12);color:#fca5a5;
+}
+.lock-title{font-size:15px;font-weight:700;color:#f4f4f5;margin-bottom:6px}
+.lock-msg{font-size:12.5px;color:#a1a1aa;line-height:1.6;margin-bottom:18px}
+.lock-timer{font-variant-numeric:tabular-nums;font-feature-settings:"tnum";font-size:34px;font-weight:800;letter-spacing:.02em;color:#f4f4f5}
+.lock-timer-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#71717a;margin-top:2px}
+@media (prefers-reduced-motion:reduce){
+  .login-box input,.pw-toggle,.login-link,.login-box .btn-a{transition:none}
+}
 
 /* ── Messages ───────────────────────────────────────────────────────────── */
 .msg-err{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border);border-radius:9px;padding:10px 12px;font-size:12px;margin-bottom:11px;line-height:1.5}
@@ -573,12 +618,6 @@ select{appearance:none;-webkit-appearance:none;
    clean white-list look adapts to dark mode automatically — no overrides needed. */
 :root[data-theme="dark"] .met{background:linear-gradient(160deg,var(--surface-2),var(--surface-3))}
 :root[data-theme="dark"] .gauge-card::after{background:linear-gradient(180deg,rgba(255,255,255,.05),transparent)}
-:root[data-theme="dark"] .login-wrap{
-  background:
-    radial-gradient(900px 500px at 50% -5%, #2a2012 0%, transparent 55%),
-    radial-gradient(700px 500px at 100% 100%, #221a12 0%, transparent 50%),
-    var(--bg);
-}
 
 /* ============================================================================
    Spatial UI — depth, glass & elevation layer (visionOS-style).
