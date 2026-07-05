@@ -367,6 +367,23 @@ function Chip(props){var c=clr(props.cat,props.cats);return h('span',{className:
 
 // ── SUPABASE DATA LAYER ───────────────────────────
 function sbErr(e){return e&&(e.message||e.details||JSON.stringify(e));}
+// Normalize an Indian mobile number to 10 digits (strips +91 / leading 0 / spaces).
+function normPhone(raw){var d=(raw||'').replace(/\D/g,'');if(d.length===12&&d.slice(0,2)==='91')d=d.slice(2);if(d.length===11&&d.charAt(0)==='0')d=d.slice(1);return d;}
+// Page through a Supabase table 1000 rows at a time — PostgREST caps a single
+// select at 1000, so a plain select('*') silently truncates a growing table.
+function fetchAllRows(table,shape){
+  var PAGE=1000,out=[];
+  function page(from){
+    var qb=supa.from(table).select('*');
+    if(shape)qb=shape(qb);
+    return qb.range(from,from+PAGE-1).then(function(r){
+      if(r.error)throw new Error(sbErr(r.error));
+      var rows=r.data||[];out=out.concat(rows);
+      return rows.length<PAGE?out:page(from+PAGE);
+    });
+  }
+  return page(0);
+}
 
 function loadMenu(){
   return supa.from('mh_menu').select('*').order('sort_order',{ascending:true,nullsFirst:false}).order('name',{ascending:true}).then(function(r){
@@ -381,10 +398,10 @@ function loadCats(){
   });
 }
 function loadCustomers(){
-  return supa.from('mh_customers').select('*').order('created_at',{ascending:false}).then(function(r){
-    if(r.error)throw new Error(sbErr(r.error));
-    return (r.data||[]).map(function(c){return Object.assign({},c,{items:c.items||[]});});
-  });
+  // Paginated: avoids the silent 1000-row PostgREST cap that would drop the oldest
+  // orders from Orders/History/Manager and from backups once the table grows.
+  return fetchAllRows('mh_customers',function(qb){return qb.order('created_at',{ascending:false});})
+    .then(function(rows){return rows.map(function(c){return Object.assign({},c,{items:c.items||[]});});});
 }
 function loadUsers(){
   return supa.from('mh_users').select('*').then(function(r){
@@ -400,12 +417,13 @@ function SetupScreen(){
     +"create table if not exists mh_menu(id text primary key,cat text,name text,price integer);\n"
     +"create table if not exists mh_customers(id text primary key,name text,room text,phone text default '',date timestamptz default now(),added_by text,items jsonb default '[]',status text default 'active',settled_at timestamptz,created_at timestamptz default now());\n"
     +"create table if not exists mh_users(id text primary key,email text,display_name text,role text default 'user',active boolean default true,created_at timestamptz default now());\n"
+    +"create table if not exists mh_config(id text primary key,data jsonb default '{}');\n"
     +"-- Bill date columns: date=order/chosen-backdate; settled_at=IMMUTABLE official\n"
     +"-- Bill Date & Time and single source of truth (settle moment, or chosen backdate).\n"
-    +"alter table mh_categories disable row level security;\n"
-    +"alter table mh_menu disable row level security;\n"
-    +"alter table mh_customers disable row level security;\n"
-    +"alter table mh_users disable row level security;";
+    +"--\n"
+    +"-- SECURITY: after creating the tables, run SECURITY-MIGRATION.sql from the repo\n"
+    +"-- in the SQL Editor. It enables Row Level Security + policies, the atomic\n"
+    +"-- next_bill_no() function, and the user-privilege guard. Do NOT disable RLS.";
   return h('div',{className:'login-wrap'},
     h('div',{className:'login-box',style:{maxWidth:440}},
       h('div',{className:'login-logo'},h('em',null,'Gavthan')),
@@ -452,17 +470,15 @@ function LoginScreen(props){
           .then(function(rr){
             if(rr.error) throw new Error(rr.error.message);
             if(!rr.data){
-              // First-time login — auto-create mh_users record (pending unless bootstrap admin)
-              var role=isAdminEmail(u.email)?'admin':'user';
-              var dn=(u.user_metadata&&u.user_metadata.display_name)||u.email.split('@')[0];
-              return supa.from('mh_users').insert({id:u.id,email:u.email,display_name:dn,role:role,active:isAdminEmail(u.email)})
-                .then(function(){
-                  if(!isAdminEmail(u.email)){
-                    supa.auth.signOut();
-                    setErr('Account created — awaiting admin approval. You will be able to login once approved.');
-                    setBusy(false);
-                  }
-                });
+              // No app profile. Under RLS, only the service-role user-admin Edge
+              // Function may create mh_users rows, so a missing profile means this
+              // account was never provisioned (staff are added from Config → Users).
+              supa.auth.signOut();
+              setErr(isAdminEmail(u.email)
+                ?'Admin account not initialized. Seed your mh_users row via SQL (see README) then log in.'
+                :'Account not set up yet. Ask your admin to add you from the Config → Users tab.');
+              setBusy(false);
+              return;
             }
             if(rr.data.active===false){
               supa.auth.signOut();
@@ -538,6 +554,11 @@ function App(props){
   var _timeout=useState(30);var sessionTimeout=_timeout[0];var setSessionTimeout=_timeout[1];
   // UPI ID for bills — DB-configurable (mh_config.app.data.upiId), falls back to the build-time constant
   var _upi=useState(UPI_ID);var upiId=_upi[0];var setUpiId=_upi[1];
+  // In-flight settle guard — prevents a double-tap (or lag) from allocating two bill numbers.
+  var settlingRef=React.useRef({});
+  // Per-order write queue — serializes +/- item taps so a fast burst can't read the
+  // same snapshot and lose increments.
+  var itemQueueRef=React.useRef({});
 
   // ── Fetch all data from Supabase ──
   function fetchAll(silent){
@@ -563,9 +584,25 @@ function App(props){
   useEffect(function(){
     seed();
     fetchAll(true);
-    // Fetch current user's record for display name
-    supa.from('mh_users').select('*').eq('id',user.id).maybeSingle()
-      .then(function(r){ if(r.data) setMyUser(r.data); }, function(){});
+    // Fetch current user's record for display name + LIVE role/active enforcement.
+    // Re-checked on an interval so a mid-session Disable / delete takes effect without
+    // waiting for the user to sign out — closes the "no kill switch" gap.
+    function refreshMe(){
+      supa.from('mh_users').select('*').eq('id',user.id).maybeSingle()
+        .then(function(r){
+          if(!r.data)return;
+          if(r.data.active===false||r.data.role==='deleted'){
+            alert(r.data.role==='deleted'
+              ?'Your account has been removed. Contact your admin.'
+              :'Your account has been disabled. Contact your admin.');
+            supa.auth.signOut();
+            return;
+          }
+          setMyUser(r.data);
+        },function(){});
+    }
+    refreshMe();
+    var meT=setInterval(refreshMe,30000);
     // Fetch app config (session timeout)
     function loadConfig(){
       supa.from('mh_config').select('data').eq('id','app').maybeSingle()
@@ -588,7 +625,7 @@ function App(props){
     var hb=setInterval(heartbeat,30000);
     // Poll every 5s for live updates across devices
     var t=setInterval(fetchAll,5000);
-    return function(){clearInterval(t);clearInterval(hb);clearInterval(cfgT);};
+    return function(){clearInterval(t);clearInterval(hb);clearInterval(cfgT);clearInterval(meT);};
   },[]);
 
   // ── Idle auto-logout with warning ──
@@ -630,18 +667,19 @@ function App(props){
     return Promise.all([
       supa.from('mh_categories').select('*'),
       supa.from('mh_menu').select('*'),
-      supa.from('mh_customers').select('*'),
+      fetchAllRows('mh_customers'),        // paginated → full history, not capped at 1000
       supa.from('mh_users').select('*'),
       supa.from('mh_config').select('*')
     ]).then(function(res){
-      for(var i=0;i<res.length;i++){if(res[i].error)throw new Error(sbErr(res[i].error));}
+      // res[2] is already an array (paginated); the rest are {data,error}
+      [0,1,3,4].forEach(function(i){if(res[i].error)throw new Error(sbErr(res[i].error));});
       var dump={
         exportedAt:new Date().toISOString(),
         hotel:HOTEL_NAME,
         version:1,
         categories:res[0].data||[],
         menu:res[1].data||[],
-        customers:res[2].data||[],
+        customers:res[2]||[],
         users:res[3].data||[],
         config:res[4].data||[]
       };
@@ -726,22 +764,34 @@ function App(props){
       if(!c.added_by) c.added_by='restored@backup';
     });
 
-    log('Restoring '+catList.length+' categories, '+menu.length+' items, '+custs.length+' orders, '+usrs.length+' users…');
+    log('Restoring '+catList.length+' categories, '+menu.length+' items, '+custs.length+' orders…');
+    // Users are NOT restored: under RLS mh_users is service-role-only, and re-seeding
+    // accounts from a file is a privilege-injection risk. Manage staff in Config → Users.
+    if(usrs.length) log('Skipped '+usrs.length+' user rows — accounts are managed in Config → Users, not restore.');
     var ops=[
       supa.from('mh_categories').upsert(catRow),
       menu.length?supa.from('mh_menu').upsert(menu):Promise.resolve({error:null}),
       custs.length?supa.from('mh_customers').upsert(custs):Promise.resolve({error:null}),
-      usrs.length?supa.from('mh_users').upsert(usrs):Promise.resolve({error:null}),
       cfg.length?supa.from('mh_config').upsert(cfg):Promise.resolve({error:null})
     ];
     return Promise.all(ops).then(function(rs){
       var errs=[];
-      ['categories','menu','customers','users','config'].forEach(function(nm,i){
+      ['categories','menu','customers','config'].forEach(function(nm,i){
         if(rs[i]&&rs[i].error){errs.push(nm+': '+sbErr(rs[i].error));}
       });
       if(errs.length){log('Errors: '+errs.join('; '));throw new Error(errs.join('\n'));}
-      log('Restore complete.');
-      return fetchAll();
+      // Reconcile the bill counter: never let a restored/older config re-mint numbers
+      // that already exist on surviving (post-backup) orders.
+      return supa.from('mh_customers').select('bill_no').not('bill_no','is',null).order('bill_no',{ascending:false}).limit(1).maybeSingle()
+        .then(function(rb){
+          var maxBill=(rb.data&&Number(rb.data.bill_no))||0;
+          return supa.from('mh_config').select('data').eq('id','app').maybeSingle().then(function(rc){
+            var c=(rc.data&&rc.data.data)||{};
+            var want=Math.max(Number(c.lastBillNo)||0,maxBill);
+            if(want!==(Number(c.lastBillNo)||0)){c.lastBillNo=want;log('Bill counter set to '+want+'.');return supa.from('mh_config').upsert({id:'app',data:c});}
+          });
+        })
+        .then(function(){log('Restore complete.');return fetchAll();});
     });
   }
 
@@ -761,6 +811,12 @@ function App(props){
 
   function saveUpiId(val){
     var v=(val||'').trim();
+    // Strict VPA format — blocks injecting extra UPI params (&am=/&pa=) that would
+    // redirect the customer's "Pay instantly" payment to another account/amount.
+    if(v && !/^[a-zA-Z0-9.\-_]{2,}@[a-zA-Z][a-zA-Z0-9.\-_]{1,}$/.test(v)){
+      showErr(new Error('Invalid UPI ID. Use the form name@bank — no spaces or symbols like & ? =.'));
+      return;
+    }
     setUpiId(v);
     // Merge into existing config so other keys (sessionTimeout, lastBillNo) aren't wiped
     supa.from('mh_config').select('data').eq('id','app').maybeSingle()
@@ -781,10 +837,12 @@ function App(props){
     var d=dateISO||new Date().toISOString();
     var row={id:id,name:name,room:room,phone:phone,date:d,
       added_by:user.email,items:[],status:'active',created_at:new Date().toISOString()};
-    supa.from('mh_customers').insert(row)
+    // Return the promise (and rethrow) so the caller can keep the form open + show a
+    // real error instead of a fake "added!" when the write fails offline.
+    return supa.from('mh_customers').insert(row)
       .then(function(r){if(r.error)throw new Error(sbErr(r.error));return fetchAll();})
       .then(function(){setSelId(id);setTab('orders');})
-      .catch(showErr);
+      .catch(function(e){showErr(e);throw e;});
   }
   function updateCustomer(cid,fields){
     setCusts(function(prev){return prev.map(function(c){return c.id===cid?Object.assign({},c,fields):c;});});
@@ -793,8 +851,12 @@ function App(props){
       .catch(function(e){showErr(e);fetchAll();});
   }
   function upsertItem(cid,mid,delta){
-    // Re-fetch the latest row first so two staff editing the same order don't overwrite each other
-    supa.from('mh_customers').select('items').eq('id',cid).maybeSingle()
+    // Chain each op after the previous one for the SAME order, so a rapid +/- burst
+    // (or this device's own concurrent taps) can't read the same snapshot and lose
+    // increments. Each op re-fetches the latest row before writing.
+    var prev=itemQueueRef.current[cid]||Promise.resolve();
+    var next=prev.then(function(){
+    return supa.from('mh_customers').select('items').eq('id',cid).maybeSingle()
       .then(function(r){
         var live=(r.data&&r.data.items)||[];
         var items=live.slice();
@@ -818,16 +880,24 @@ function App(props){
       })
       .then(function(r){if(r&&r.error)throw new Error(sbErr(r.error));})
       .catch(function(e){showErr(e);fetchAll();});
+    });
+    itemQueueRef.current[cid]=next.catch(function(){}); // keep the chain alive on error
+    return next;
   }
   function settle(cid){
     var cust=custs.find(function(c){return c.id===cid;});
     if(!cust)return;
+    if(cust.status!=='active'){alert('This order is already settled.');return;}
     if(!admin&&cust.added_by!==user.email){alert('You can only settle your own orders. Ask an admin.');return;}
-    if(finalTotal(cust)===0){alert('Cannot settle zero-amount bill. Add items first.');return;}
+    if(!cust.items||cust.items.length===0){alert('Cannot settle an empty order. Add items first.');return;}
+    var total=finalTotal(cust);
+    if(total<=0){alert('Bill total must be greater than ₹0. Check the discount / adjustment.');return;}
     if((cust.discount_on||cust.adjustment_on)&&!(cust.reason||'').trim()){
       alert('A Reason is required when Discount or Adjustment is applied. Please fill the Reason field.');return;
     }
+    if(settlingRef.current[cid])return; // in-flight guard — ignore double-taps
     if(!confirm('Settle this customer?'))return;
+    settlingRef.current[cid]=true;
     // settled_at = the official, immutable "Bill Date & Time" and single source of
     // truth. Frozen ONCE here and never recomputed:
     //   • backdated order  → lock to the manually chosen creation date (cust.date)
@@ -835,20 +905,18 @@ function App(props){
     var orderDate=cust.date?new Date(cust.date):new Date();
     var isBackdated=orderDate.toDateString()!==new Date().toDateString();
     var settledAt=isBackdated?orderDate.toISOString():new Date().toISOString();
-    // Assign a sequential bill number from the mh_config counter
-    supa.from('mh_config').select('data').eq('id','app').maybeSingle()
+    // Atomic, server-side bill-number allocation (next_bill_no RPC from SECURITY-MIGRATION.sql).
+    // .eq('status','active') makes the stamp idempotent: a concurrent settle updates 0 rows
+    // and the DB's unique index on bill_no guarantees numbers can never collide.
+    supa.rpc('next_bill_no')
       .then(function(r){
-        var cfg=(r.data&&r.data.data)||{};
-        var nextNo=(Number(cfg.lastBillNo)||0)+1;
-        cfg.lastBillNo=nextNo;
-        return supa.from('mh_config').upsert({id:'app',data:cfg}).then(function(){return nextNo;});
-      })
-      .then(function(nextNo){
-        return supa.from('mh_customers').update({status:'settled',settled_at:settledAt,bill_no:nextNo}).eq('id',cid);
+        if(r.error)throw new Error(sbErr(r.error));
+        return supa.from('mh_customers').update({status:'settled',settled_at:settledAt,bill_no:r.data}).eq('id',cid).eq('status','active');
       })
       .then(function(r){if(r.error)throw new Error(sbErr(r.error));return fetchAll();})
       .then(function(){if(selId===cid)setSelId(null);})
-      .catch(showErr);
+      .catch(showErr)
+      .then(function(){delete settlingRef.current[cid];},function(){delete settlingRef.current[cid];});
   }
   function delCust(cid){
     var cust=custs.find(function(c){return c.id===cid;});
@@ -861,7 +929,7 @@ function App(props){
       .catch(showErr);
   }
   function setDiscount(cid,pct){
-    var p=Number(pct)||0;
+    var p=Math.max(0,Math.min(100,Number(pct)||0)); // clamp 0–100% (input max is advisory only)
     var on=p>0;
     setCusts(function(prev){return prev.map(function(c){return c.id===cid?Object.assign({},c,{discount_on:on,discount_pct:p}):c;});});
     supa.from('mh_customers').update({discount_on:on,discount_pct:p}).eq('id',cid)
@@ -869,7 +937,7 @@ function App(props){
       .catch(function(e){showErr(e);fetchAll();});
   }
   function setAdjustment(cid,amt){
-    var n=Number(amt)||0;
+    var n=Math.max(-1000000,Math.min(1000000,Number(amt)||0)); // clamp to a sane ±10L range
     var on=n!==0;
     setCusts(function(prev){return prev.map(function(c){return c.id===cid?Object.assign({},c,{adjustment_on:on,adjustment:n}):c;});});
     supa.from('mh_customers').update({adjustment_on:on,adjustment:n}).eq('id',cid)
@@ -952,12 +1020,24 @@ function App(props){
       cb(null,'User "'+name+'" added!'+note);
     }).catch(function(e){console.error('[addUser]',e);cb(e.message);});
   }
+  // All privileged mh_users mutations go through the service-role user-admin Edge
+  // Function. Direct client updates of role/active are now blocked by the DB trigger
+  // (SECURITY-MIGRATION.sql), so these MUST route through the function.
+  function callUserAdmin(payload){
+    return supa.auth.getSession().then(function(r){
+      var jwt=r&&r.data&&r.data.session&&r.data.session.access_token;
+      if(!jwt) throw new Error('Not signed in.');
+      var url=((window.GH_CONFIG||{}).supabaseUrl||'').replace(/\/rest\/v1\/?$/,'').replace(/\/$/,'')+'/functions/v1/user-admin';
+      return fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+jwt,'apikey':SUPABASE_KEY},body:JSON.stringify(payload)})
+        .then(function(rs){return rs.json().then(function(j){if(!rs.ok)throw new Error(j.error||('HTTP '+rs.status));return j;});});
+    });
+  }
   function toggleUserActive(id,current){
-    supa.from('mh_users').update({active:!current}).eq('id',id)
+    callUserAdmin({action:'set-active',userId:id,active:!current})
       .then(function(){fetchAll();}).catch(showErr);
   }
   function changeUserRole(id,newRole){
-    supa.from('mh_users').update({role:newRole}).eq('id',id)
+    callUserAdmin({action:'set-role',userId:id,role:newRole})
       .then(function(){fetchAll();}).catch(showErr);
   }
   function deleteUser(id,email){
@@ -1071,7 +1151,7 @@ function OrdersTab(props){
   var active=props.active,menu=props.menu,cats=props.cats,selId=props.selId,setSelId=props.setSelId;
   var upsertItem=props.upsertItem,settle=props.settle,delCust=props.delCust,setBillId=props.setBillId,menuErr=props.menuErr||'';
   var _q=useState('');var q=_q[0];var setQ=_q[1];
-  var list=active.filter(function(c){return c.name.toLowerCase().indexOf(q.toLowerCase())!==-1||c.room.toLowerCase().indexOf(q.toLowerCase())!==-1;});
+  var list=active.filter(function(c){return (c.name||'').toLowerCase().indexOf(q.toLowerCase())!==-1||(c.room||'').toLowerCase().indexOf(q.toLowerCase())!==-1;});
   return h('div',null,
     menuErr&&h('div',{style:{background:'#FEF2F2',color:'#991B1B',border:'1px solid #FECACA',borderRadius:8,padding:'10px 12px',marginBottom:8,fontSize:12}},menuErr),
     h('input',{placeholder:'Search customer / room…',value:q,onChange:function(e){setQ(e.target.value);},style:{marginBottom:8}}),
@@ -1223,7 +1303,7 @@ function OrderPanel(props){
       h('button',{className:'btn xs',onClick:function(){setBillId(cust.id);}},'🧾 Bill'),
       h('button',{className:'btn xs',onClick:printKOT},'👨‍🍳 KOT'),
       h('button',{className:'btn btn-g xs',onClick:function(){settle(cust.id);}},'✓ Settle'),
-      h('button',{className:'btn btn-r xs',onClick:function(){if(confirm('Delete?'))delCust(cust.id);}},'🗑')
+      h('button',{className:'btn btn-r xs',onClick:function(){delCust(cust.id);}},'🗑')
     )
   );
 }
@@ -1236,9 +1316,10 @@ function NewTab(props){
   var _room=useState('');var room=_room[0];var setRoom=_room[1];
   var _phone=useState('');var phone=_phone[0];var setPhone=_phone[1];
   var _msg=useState('');var msg=_msg[0];var setMsg=_msg[1];
+  var _busy=useState(false);var busy=_busy[0];var setBusy=_busy[1];
   var _search=useState('');var search=_search[0];var setSearch=_search[1];
   // Bill date — default today, allow up to 15 days back
-  function ymd(d){return d.toISOString().slice(0,10);}
+  function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');} // LOCAL date (toISOString is UTC → wrong before 05:30 IST)
   var todayYMD=ymd(new Date());
   var minYMD=ymd(new Date(Date.now()-15*86400000));
   var _date=useState(todayYMD);var billDate=_date[0];var setBillDate=_date[1];
@@ -1276,10 +1357,11 @@ function NewTab(props){
   }
 
   function submit(){
+    if(busy)return; // guard against double-submit creating duplicate customers
     if(!name.trim()||!room.trim()){setMsg('Name and room required.');return;}
-    var ph=phone.trim().replace(/\D/g,'');
+    var ph=normPhone(phone);
     if(ph && ph.length!==10){
-      setMsg('Phone must be exactly 10 digits (or leave empty).');return;
+      setMsg('Phone must be a 10-digit mobile number (or leave empty).');return;
     }
     // Validate the bill date is within the allowed window (admin only — staff is locked)
     if(admin&&billDate!==todayYMD){
@@ -1299,9 +1381,15 @@ function NewTab(props){
         now.getHours(),now.getMinutes(),now.getSeconds());
       dateISO=d.toISOString();
     }
-    addCust(name.trim(),room.trim(),ph,dateISO);
-    setRoom('');setPhone('');setBillDate(todayYMD);setMsg('Customer added!');
-    setTimeout(function(){setMsg('');},3000);
+    setBusy(true);setMsg('');
+    Promise.resolve(addCust(name.trim(),room.trim(),ph,dateISO))
+      .then(function(){
+        setRoom('');setPhone('');setBillDate(todayYMD);setMsg('Customer added!');
+        setTimeout(function(){setMsg('');},3000);
+      },function(){
+        setMsg('Could not save — check your connection and try again.');
+      })
+      .then(function(){setBusy(false);},function(){setBusy(false);});
   }
 
   var hasContacts=!!(navigator.contacts&&navigator.contacts.select);
@@ -1360,7 +1448,7 @@ function NewTab(props){
               h('div',{style:{fontSize:10,color:'var(--text-2)',marginTop:2}},'Backdated bills are admin-only.')
             )
       ),
-      h('button',{className:'btn btn-a',style:{width:'100%',marginTop:4,justifyContent:'center'},onClick:submit},'Add Customer'),
+      h('button',{className:'btn btn-a',style:{width:'100%',marginTop:4,justifyContent:'center'},onClick:submit,disabled:busy},busy&&h('span',{className:'spin'}),'Add Customer'),
       msg&&h('div',{style:{marginTop:6,fontSize:12,color:msg.indexOf('!')!==-1||msg.indexOf('✓')!==-1?'#166534':'#991B1B',textAlign:'center'}},msg)
     )
   );
@@ -1371,6 +1459,21 @@ function HistoryTab(props){
   var settled=props.settled,todayRev=props.todayRev,todaySett=props.todaySett;
   var cats=props.cats,setBillId=props.setBillId,delCust=props.delCust;
   var admin=props.admin,userEmail=props.userEmail,users=props.users||[];
+
+  // Hooks must run unconditionally, BEFORE the non-admin early return — otherwise the
+  // hook count changes when `admin` flips (role resolves ~1s after login) and React
+  // crashes the whole app with "rendered more hooks than during the previous render".
+  var now=new Date();
+  var _mode=useState('date');var filterMode=_mode[0];var setFilterMode=_mode[1];
+  var _sn=useState('');var searchName=_sn[0];var setSearchName=_sn[1];
+  var _sf=useState('');var dateFrom=_sf[0];var setDateFrom=_sf[1];
+  var _st=useState('');var dateTo=_st[0];var setDateTo=_st[1];
+  var _sm=useState(String(now.getMonth()+1).padStart(2,'0'));var selMonth=_sm[0];var setSelMonth=_sm[1];
+  var _sy=useState(String(now.getFullYear()));var selYear=_sy[0];var setSelYear=_sy[1];
+  var _ss=useState('all');var selStaff=_ss[0];var setSelStaff=_ss[1];
+  var _page=useState(0);var page=_page[0];var setPage=_page[1];
+  var PAGE_SIZE=10;
+  useEffect(function(){setPage(0);},[searchName,dateFrom,dateTo,selMonth,selYear,selStaff,filterMode]);
 
   if(!admin){
     var todayStr2=new Date().toDateString();
@@ -1404,27 +1507,17 @@ function HistoryTab(props){
     );
   }
 
-  var now=new Date();
-  var _mode=useState('date');var filterMode=_mode[0];var setFilterMode=_mode[1];
-  var _sn=useState('');var searchName=_sn[0];var setSearchName=_sn[1];
-  var _sf=useState('');var dateFrom=_sf[0];var setDateFrom=_sf[1];
-  var _st=useState('');var dateTo=_st[0];var setDateTo=_st[1];
-  var _sm=useState(String(now.getMonth()+1).padStart(2,'0'));var selMonth=_sm[0];var setSelMonth=_sm[1];
-  var _sy=useState(String(now.getFullYear()));var selYear=_sy[0];var setSelYear=_sy[1];
-  var _ss=useState('all');var selStaff=_ss[0];var setSelStaff=_ss[1];
-  var _page=useState(0);var page=_page[0];var setPage=_page[1];
-  var PAGE_SIZE=10;
   var allRev=settled.reduce(function(s,c){return s+finalTotal(c);},0);
   var staffList=users.filter(function(u){return u.active!==false;});
   var shown=settled.filter(function(c){
     if(selStaff!=='all'&&(c.added_by||'')!==selStaff)return false;
-    if(searchName){var n=searchName.toLowerCase();if(c.name.toLowerCase().indexOf(n)===-1&&c.room.toLowerCase().indexOf(n)===-1)return false;}
+    if(searchName){var n=searchName.toLowerCase();if((c.name||'').toLowerCase().indexOf(n)===-1&&(c.room||'').toLowerCase().indexOf(n)===-1)return false;}
     // Bucket by settled_at (the canonical bill date) so History ties out exactly
     // to the Manager dashboard, which uses settled_at||date. Fall back to date
     // for legacy bills with no settled_at.
     var dt=c.settled_at?new Date(c.settled_at):(c.date?new Date(c.date):null);
     if(!dt)return true;
-    if(filterMode==='date'){if(dateFrom&&dt<new Date(dateFrom))return false;if(dateTo&&dt>new Date(dateTo+'T23:59:59'))return false;}
+    if(filterMode==='date'){if(dateFrom&&dt<new Date(dateFrom+'T00:00:00'))return false;if(dateTo&&dt>new Date(dateTo+'T23:59:59'))return false;}
     else if(filterMode==='month'){if(String(dt.getMonth()+1).padStart(2,'0')!==selMonth)return false;if(String(dt.getFullYear())!==selYear)return false;}
     else if(filterMode==='year'){if(String(dt.getFullYear())!==selYear)return false;}
     return true;
@@ -1433,8 +1526,6 @@ function HistoryTab(props){
   var totalPages=Math.max(1,Math.ceil(shown.length/PAGE_SIZE));
   var safePage=Math.min(page,totalPages-1);
   var pageItems=shown.slice(safePage*PAGE_SIZE,(safePage+1)*PAGE_SIZE);
-  // Reset to page 0 when filters change
-  useEffect(function(){setPage(0);},[searchName,dateFrom,dateTo,selMonth,selYear,selStaff,filterMode]);
 
   function exportCSV(){
     if(typeof XLSX==='undefined'){alert('Excel library not loaded. Check your internet connection and reload.');return;}
@@ -2324,7 +2415,10 @@ function BillModal(props){
   var upiId=props.upiId!=null?props.upiId:UPI_ID;
   // Displayed bill number = locked one if settled, else current preview (lastBillNo+1)
   // STRICT: settled bills lock to their stored bill_no immutably; preview only used for unsettled
-  var displayBillNo=(cust.status==='settled')?(cust.bill_no||null):(cust.bill_no||previewBillNo||null);
+  // Only show a bill number once it is actually assigned at settle. Printing the
+  // preview (lastBillNo+1) on an unsettled order risked handing two customers the
+  // same INV number if another order settled first.
+  var displayBillNo=cust.bill_no||null;
   var t=finalTotal(cust);
   var _editN=useState(cust.name||'');var editName=_editN[0];var setEditName=_editN[1];
   var _editP=useState(cust.phone||'');var editPhone=_editP[0];var setEditPhone=_editP[1];
@@ -2397,12 +2491,12 @@ function BillModal(props){
 
   // Ask for phone if not already saved (or invalid), and persist it to customer DB
   function ensurePhone(cb){
-    var ph=(cust.phone||'').replace(/\D/g,'');
+    var ph=normPhone(cust.phone);
     if(ph.length===10){cb(ph);return;}
     var input=prompt('Enter customer 10-digit mobile number\n(will be saved to customer record):',cust.phone||'');
     if(input===null)return;
-    var clean=input.replace(/\D/g,'');
-    if(clean.length!==10){alert('Phone must be exactly 10 digits.');return;}
+    var clean=normPhone(input); // tolerates +91 / leading 0 / spaces
+    if(clean.length!==10){alert('Phone must be a 10-digit Indian mobile number.');return;}
     if(onSavePhone) onSavePhone(clean);
     cb(clean);
   }
@@ -2474,7 +2568,9 @@ function BillModal(props){
   function sendSMS(){
     if(t===0){alert('Cannot send a zero-amount bill. Add items first.');return;}
     ensurePhone(function(phone){
-      var url='sms:+91'+phone+'?body='+encodeURIComponent(billText());
+      // Strip WhatsApp-only markup (*, _, ```), otherwise SMS shows literal asterisks/backticks.
+      var body=billText().replace(/```/g,'').replace(/[*_]/g,'');
+      var url='sms:+91'+phone+'?body='+encodeURIComponent(body);
       window.location.href=url;
     });
   }
@@ -2565,7 +2661,7 @@ function BillModal(props){
   function thermalPrint(){
     if(t===0){alert('Cannot print a zero-amount bill.');return;}
     try{
-      var bytes=ESCPOS.encodeBill(cust,{hotel:HOTEL_NAME,upi:upiId,previewBillNo:previewBillNo});
+      var bytes=ESCPOS.encodeBill(cust,{hotel:HOTEL_NAME,upi:upiId,previewBillNo:displayBillNo});
       ThermalPrinter.print(bytes).catch(function(e){
         alert('Thermal print failed: '+e.message+'\n\nTip: Configure transport in Users → Thermal Printer Settings, or use PDF/JPEG instead.');
       });
@@ -2674,6 +2770,32 @@ function ResetPasswordScreen(props){
   );
 }
 
+// ── ERROR BOUNDARY ─────────────────────────────────
+// Last-resort guard: any render/runtime error is caught here so a single bad
+// row or state bug shows a recoverable "Reload" card instead of a blank screen.
+function ErrorBoundary(props){return h(ErrorBoundaryClass,props);}
+var ErrorBoundaryClass=(function(){
+  function EB(p){React.Component.call(this,p);this.state={err:null};}
+  EB.prototype=Object.create(React.Component.prototype);
+  EB.prototype.constructor=EB;
+  EB.getDerivedStateFromError=function(err){return {err:err};};
+  EB.prototype.componentDidCatch=function(err,info){try{console.error('[ErrorBoundary]',err,info);}catch(e){}};
+  EB.prototype.render=function(){
+    if(this.state.err){
+      return h('div',{className:'login-wrap'},
+        h('div',{className:'login-box',style:{maxWidth:420,textAlign:'center'}},
+          h('div',{className:'login-logo'},h('em',null,'Gavthan')),
+          h('div',{style:{fontSize:14,fontWeight:700,margin:'10px 0 6px'}},'Something went wrong'),
+          h('div',{className:'muted',style:{fontSize:12,marginBottom:14}},'The screen hit an unexpected error. Your saved orders are safe — reload to continue.'),
+          h('button',{className:'btn btn-a',style:{width:'100%',justifyContent:'center'},onClick:function(){window.location.reload();}},'↻ Reload app')
+        )
+      );
+    }
+    return this.props.children;
+  };
+  return EB;
+})();
+
 // ── ROOT ───────────────────────────────────────────
 function Root(){
   var _user=useState(undefined);var user=_user[0];var setUser=_user[1];
@@ -2707,7 +2829,7 @@ function Root(){
   // key=user.id → a different user signing in on the same device fully remounts
   // App, so no stale orders/selection/bill-modal/role from the previous session
   // linger on screen while data re-fetches.
-  return h(App,{key:user.id,user:user});
+  return h(ErrorBoundary,null,h(App,{key:user.id,user:user}));
 }
 
 // Mounted from main.js entry (App root exported below)

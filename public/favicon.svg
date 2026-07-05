@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Gavthan">
+  <rect width="64" height="64" rx="15" fill="#0b0b0d"/>
+  <g stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M42 15 C48 21 48 30 42 34 L42 49" stroke="#ffffff" stroke-width="3.6"/>
+    <line x1="20" y1="15" x2="20" y2="27" stroke="#ffffff" stroke-width="3.4"/>
+    <line x1="28" y1="15" x2="28" y2="27" stroke="#ffffff" stroke-width="3.4"/>
+    <line x1="24" y1="15" x2="24" y2="27" stroke="#ea5b26" stroke-width="3.4"/>
+    <path d="M20 27 Q24 31 24 34 L24 49 M28 27 Q24 31 24 34" stroke="#ffffff" stroke-width="3.4"/>
+  </g>
+</svg>
