@@ -25,6 +25,7 @@
   --primary-700:#7c3a06;
   --primary-tint:#fbf2e3;
   --primary-tint-2:#f6e7d0;
+  --primary-rgb:180,83,9;
 
   /* Semantic */
   --green:#15803d;  --green-bg:#eaf6ee;  --green-border:#c2e6cd;
@@ -51,39 +52,41 @@
   color-scheme:light;
 }
 
-/* ── Dark theme — warm, low-glare "night kitchen" palette ─────────────────── */
+/* ── Dark theme — clean, minimal "tech" slate with a cool indigo accent
+   (deliberately NO orange in dark mode; light mode keeps the terracotta brand). */
 :root[data-theme="dark"]{
-  --bg:#14110d;
-  --surface:#1e1a15;
-  --surface-2:#27211a;
-  --surface-3:#322a21;
-  --border:#352d23;
-  --border-strong:#483e31;
+  --bg:#0a0a0b;
+  --surface:#141416;
+  --surface-2:#1c1c20;
+  --surface-3:#26262b;
+  --border:#26262b;
+  --border-strong:#37373d;
 
-  --text:#f4ece0;
-  --text-2:#b6ac9c;
-  --text-3:#857b6d;
+  --text:#f4f4f5;
+  --text-2:#a1a1aa;
+  --text-3:#71717a;
 
-  --primary:#e08a3c;
-  --primary-600:#cf7a2c;
-  --primary-700:#b9691f;
-  --primary-tint:#2c2113;
-  --primary-tint-2:#3c2d18;
+  --primary:#8aa4ff;
+  --primary-600:#7793f2;
+  --primary-700:#6a86ea;
+  --primary-tint:#1a2138;
+  --primary-tint-2:#232c48;
+  --primary-rgb:138,164,255;
 
-  --green:#5cd08a;  --green-bg:#15301f;  --green-border:#235a39;
-  --red:#f0908f;    --red-bg:#3a1a1b;    --red-border:#5e2a2c;
-  --amber:#e6bd72;  --amber-bg:#322611;  --amber-border:#5a4720;
-  --blue:#92b2f1;   --blue-bg:#171f39;   --blue-border:#28365e;
+  --green:#4ade80;  --green-bg:#0f2417;  --green-border:#1d3f2b;
+  --red:#f87171;    --red-bg:#2a1516;    --red-border:#4a2325;
+  --amber:#fbbf24;  --amber-bg:#2a2109;  --amber-border:#4a3d18;
+  --blue:#7ea6ff;   --blue-bg:#141d33;   --blue-border:#243559;
 
-  --shadow-sm:0 1px 2px rgba(0,0,0,.4);
-  --shadow:0 2px 6px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.4);
-  --shadow-lg:0 20px 50px rgba(0,0,0,.6);
-  --ring:0 0 0 3px rgba(224,138,60,.3);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.5);
+  --shadow:0 2px 6px rgba(0,0,0,.5), 0 8px 24px rgba(0,0,0,.5);
+  --shadow-lg:0 20px 50px rgba(0,0,0,.65);
+  --ring:0 0 0 3px rgba(138,164,255,.30);
 
-  --glass:rgba(34,29,23,.66);
-  --glass-2:rgba(34,29,23,.45);
+  --glass:rgba(20,20,24,.68);
+  --glass-2:rgba(20,20,24,.45);
   --glass-border:rgba(255,255,255,.08);
-  --bg-glow:#241b11;
+  --bg-glow:#101018;
 
   color-scheme:dark;
 }
@@ -151,7 +154,7 @@ body{
 .logo em{
   color:var(--primary);
   font-style:normal;
-  background:linear-gradient(120deg,var(--primary),#d97706);
+  background:linear-gradient(120deg,var(--primary),var(--primary-600));
   -webkit-background-clip:text;
   background-clip:text;
   -webkit-text-fill-color:transparent;
@@ -368,7 +371,7 @@ select{appearance:none;-webkit-appearance:none;
   min-height:100vh;min-height:100dvh;
   display:flex;align-items:center;justify-content:center;
   background:
-    radial-gradient(680px 380px at 50% -8%, rgba(224,138,60,.10), transparent 60%),
+    radial-gradient(680px 380px at 50% -8%, rgba(138,164,255,.10), transparent 60%),
     radial-gradient(520px 360px at 100% 112%, rgba(37,99,235,.06), transparent 55%),
     #08090a;
   padding:24px;
@@ -384,8 +387,8 @@ select{appearance:none;-webkit-appearance:none;
 }
 .login-logo{text-align:center;font-size:27px;font-weight:800;margin-bottom:6px;letter-spacing:-.02em;color:#f4f4f5}
 .login-logo em{
-  color:#e8944a;font-style:normal;
-  background:linear-gradient(120deg,#e8944a,#f0b06a);
+  color:#8aa4ff;font-style:normal;
+  background:linear-gradient(120deg,#8aa4ff,#a9bcff);
   -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
 }
 .login-sub{text-align:center;font-size:12.5px;color:#a1a1aa;margin-bottom:26px}
@@ -397,7 +400,7 @@ select{appearance:none;-webkit-appearance:none;
   border-radius:10px;min-height:46px;transition:border-color .15s,box-shadow .15s;
 }
 .login-box input::placeholder{color:#6b6b73}
-.login-box input:focus{outline:none;border-color:#e8944a;box-shadow:0 0 0 3px rgba(232,148,74,.22)}
+.login-box input:focus{outline:none;border-color:#8aa4ff;box-shadow:0 0 0 3px rgba(138,164,255,.22)}
 /* Password field with show/hide toggle */
 .pw-wrap{position:relative}
 .pw-wrap input{padding-right:46px}
@@ -407,13 +410,13 @@ select{appearance:none;-webkit-appearance:none;
   background:none;border:none;cursor:pointer;color:#8b8b93;transition:color .15s;
 }
 .pw-toggle:hover{color:#f4f4f5}
-.pw-toggle:focus-visible{outline:none;color:#e8944a;box-shadow:0 0 0 3px rgba(232,148,74,.22);border-radius:8px}
+.pw-toggle:focus-visible{outline:none;color:#8aa4ff;box-shadow:0 0 0 3px rgba(138,164,255,.22);border-radius:8px}
 /* Login primary button — accessible dark-text-on-amber (white-on-amber fails AA) */
-.login-box .btn-a{background:#e8944a!important;border-color:#e8944a!important;color:#1a1206!important;box-shadow:none!important;min-height:46px;font-size:13px}
-.login-box .btn-a:hover{background:#efa661!important;border-color:#efa661!important}
+.login-box .btn-a{background:#8aa4ff!important;border-color:#8aa4ff!important;color:#0d1220!important;box-shadow:none!important;min-height:46px;font-size:13px}
+.login-box .btn-a:hover{background:#9db3ff!important;border-color:#9db3ff!important}
 .login-box .btn-a:disabled{opacity:.5}
-.login-link{color:#e8944a;cursor:pointer;font-weight:600;transition:color .15s}
-.login-link:hover{color:#f0b06a}
+.login-link{color:#8aa4ff;cursor:pointer;font-weight:600;transition:color .15s}
+.login-link:hover{color:#a9bcff}
 .login-foot{text-align:center;font-size:11.5px;color:#8b8b93}
 /* Message chips scoped to the dark login card (global .msg-* unchanged) */
 .login-box .msg-err{background:rgba(220,38,38,.12);color:#fca5a5;border-color:rgba(248,113,113,.28)}
@@ -565,7 +568,7 @@ select{appearance:none;-webkit-appearance:none;
   width:74%;max-width:30px;border-radius:6px 6px 3px 3px;
   background:linear-gradient(180deg,var(--primary),var(--primary-700));
   min-height:3px;transition:height .7s cubic-bezier(.2,.8,.2,1);
-  box-shadow:0 2px 6px rgba(180,83,9,.25);
+  box-shadow:0 2px 6px rgba(0,0,0,.25);
 }
 .bar-col.peak .bar-fill{background:linear-gradient(180deg,#22c55e,#15803d);box-shadow:0 2px 6px rgba(21,128,61,.3)}
 .bar-x{font-size:9px;color:var(--text-3);white-space:nowrap}
@@ -638,9 +641,19 @@ body::before{
 }
 :root[data-theme="dark"] body::before{
   background:
-    radial-gradient(48% 38% at 12% 4%, rgba(224,138,60,.10), transparent 72%),
-    radial-gradient(46% 40% at 100% 96%, rgba(120,150,255,.06), transparent 72%);
+    radial-gradient(48% 38% at 12% 4%, rgba(138,164,255,.08), transparent 72%),
+    radial-gradient(46% 40% at 100% 96%, rgba(120,150,255,.05), transparent 72%);
 }
+/* Dark mode: neutralise the remaining hard-coded orange accents (spatial glows,
+   primary-button text, primary-tint badges) so the app has NO orange in dark. */
+:root[data-theme="dark"] .btn-a{color:#0d1220!important;box-shadow:0 2px 10px rgba(138,164,255,.22)!important}
+:root[data-theme="dark"] .btn-a:hover{box-shadow:0 8px 20px rgba(138,164,255,.30)!important}
+:root[data-theme="dark"] .cats button.on{box-shadow:0 0 0 3px rgba(138,164,255,.16)}
+:root[data-theme="dark"] .ccard.sel,
+:root[data-theme="dark"] .ccard.sel:hover,
+:root[data-theme="dark"] .ccard.sel:active{box-shadow:0 0 0 3px rgba(138,164,255,.16), var(--shadow)}
+:root[data-theme="dark"] .badge-admin,
+:root[data-theme="dark"] .tag-a{color:var(--primary)}
 
 /* The app shell reads as one floating pane on wider screens. */
 @media (min-width:520px){

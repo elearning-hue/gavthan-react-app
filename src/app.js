@@ -480,47 +480,68 @@ function LoginScreen(){
   function clearFails(){lsDel('gv_login_fails');lsDel('gv_login_locked_until');}
   function fmtRemain(ms){var s=Math.ceil(ms/1000);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
 
-  function doAuth(){
-    if(lockUntil>Date.now())return; // locked out
-    if(!email.trim()||!pass){setErr('Email and password required.');return;}
-    setBusy(true);setErr('');setConfirmMsg('');
-    supa.auth.signInWithPassword({email:email.trim(),password:pass})
-      .then(function(r){
-        if(r.error){
-          var m=r.error.message.toLowerCase();
-          if(m.indexOf('email')!==-1&&m.indexOf('confirm')!==-1){
-            // Unconfirmed email is a real account, not a brute-force guess — don't count it.
-            setErr('Please confirm your email first. Check your inbox for the confirmation link.');
-            setBusy(false);return;
-          }
-          var left=LOCK_MAX-recordFail();
-          if(left>0)setErr('Incorrect email or password. '+left+' attempt'+(left!==1?'s':'')+' left before a 1-hour lock.');
-          setBusy(false);return;
+  function applyServerLock(iso){var until=iso?new Date(iso).getTime():0;if(until>Date.now()){lsSet('gv_login_locked_until',String(until));setLockUntil(until);}}
+
+  function finishAuth(u){
+    // Post-credential profile checks (RLS-provisioned accounts only).
+    return supa.from('mh_users').select('*').eq('id',u.id).maybeSingle()
+      .then(function(rr){
+        if(rr.error) throw new Error(rr.error.message);
+        if(!rr.data){
+          supa.auth.signOut();
+          setErr(isAdminEmail(u.email)
+            ?'Admin account not initialized. Seed your mh_users row via SQL (see README) then log in.'
+            :'Account not set up yet. Ask your admin to add you from the Config → Users tab.');
+          setBusy(false);
+          return;
         }
-        clearFails(); // correct credentials → reset the failed-attempt counter
-        var u=r.data.user;
-        return supa.from('mh_users').select('*').eq('id',u.id).maybeSingle()
-          .then(function(rr){
-            if(rr.error) throw new Error(rr.error.message);
-            if(!rr.data){
-              // No app profile. Under RLS, only the service-role user-admin Edge
-              // Function may create mh_users rows, so a missing profile means this
-              // account was never provisioned (staff are added from Config → Users).
-              supa.auth.signOut();
-              setErr(isAdminEmail(u.email)
-                ?'Admin account not initialized. Seed your mh_users row via SQL (see README) then log in.'
-                :'Account not set up yet. Ask your admin to add you from the Config → Users tab.');
-              setBusy(false);
-              return;
+        if(rr.data.active===false){
+          supa.auth.signOut();
+          setErr(rr.data.role==='deleted'
+            ?'Your account has been removed. Contact admin.'
+            :'Account awaiting admin approval. Please try again later.');
+          setBusy(false);
+        }
+      });
+  }
+
+  function doAuth(){
+    if(lockUntil>Date.now())return; // locked out (device)
+    if(!email.trim()||!pass){setErr('Email and password required.');return;}
+    var em=email.trim().toLowerCase();
+    setBusy(true);setErr('');setConfirmMsg('');
+    // Authoritative, cross-device check first. Degrades to local-only lockout if
+    // the rate-limit RPCs aren't installed (SECURITY-LOGIN-RATELIMIT.sql) or are
+    // unreachable — the login still works, just without the server backstop.
+    supa.rpc('login_attempt_status',{p_email:em})
+      .then(function(st){return (st&&!st.error&&st.data&&st.data.locked)?st.data:null;},function(){return null;})
+      .then(function(serverLock){
+        if(serverLock){applyServerLock(serverLock.locked_until);setBusy(false);return;}
+        return supa.auth.signInWithPassword({email:email.trim(),password:pass}).then(function(r){
+          if(r.error){
+            var m=r.error.message.toLowerCase();
+            if(m.indexOf('email')!==-1&&m.indexOf('confirm')!==-1){
+              // Unconfirmed email is a real account, not a brute-force guess — don't count it.
+              setErr('Please confirm your email first. Check your inbox for the confirmation link.');
+              setBusy(false);return;
             }
-            if(rr.data.active===false){
-              supa.auth.signOut();
-              setErr(rr.data.role==='deleted'
-                ?'Your account has been removed. Contact admin.'
-                :'Account awaiting admin approval. Please try again later.');
-              setBusy(false);
-            }
-          });
+            var localFails=recordFail(); // device counter (sets local lock at the max)
+            return supa.rpc('record_login_fail',{p_email:em})
+              .then(function(sr){return (sr&&!sr.error)?sr.data:null;},function(){return null;})
+              .then(function(d){
+                if(d&&d.locked){applyServerLock(d.locked_until);}
+                else if(localFails<LOCK_MAX){
+                  var left=d?d.attempts_left:Math.max(0,LOCK_MAX-localFails);
+                  setErr('Incorrect email or password. '+left+' attempt'+(left!==1?'s':'')+' left before a 1-hour lock.');
+                }
+                setBusy(false);
+              });
+          }
+          // Correct credentials → clear both counters, then run profile checks.
+          clearFails();
+          supa.rpc('clear_login_fails',{p_email:em}).then(function(){},function(){});
+          return finishAuth(r.data.user);
+        });
       })
       .catch(function(e){setErr(e.message);setBusy(false);});
   }
@@ -1155,7 +1176,7 @@ function App(props){
   return h('div',{className:'wrap'},
     !online&&h('div',{style:{background:'#991B1B',color:'#fff',padding:'6px 12px',fontSize:12,fontWeight:600,textAlign:'center'}},
       '⚠ You are offline — changes will not be saved until the connection returns.'),
-    idleWarn&&online&&h('div',{style:{background:'#B45309',color:'#fff',padding:'6px 12px',fontSize:12,fontWeight:600,textAlign:'center'}},
+    idleWarn&&online&&h('div',{style:{background:'var(--primary)',color:'#fff',padding:'6px 12px',fontSize:12,fontWeight:600,textAlign:'center'}},
       '⏱ You will be logged out in 1 minute due to inactivity. Move the mouse or tap to stay signed in.'),
     h('div',{className:'hdr'},
       h('div',{className:'logo'},h('em',null,'Gavthan')),
@@ -1208,7 +1229,7 @@ function OrdersTab(props){
       return h('div',{key:c.id,className:'ccard'+(c.id===selId?' sel':''),onClick:function(){setSelId(c.id===selId?null:c.id);}},
         h('div',{className:'row bw'},
           h('div',null,h('div',{style:{fontWeight:700}},c.name),h('div',{className:'muted',style:{fontSize:11}},c.room+(c.phone?' · '+c.phone:''))),
-          h('div',{style:{textAlign:'right'}},h('div',{style:{fontWeight:700,color:'#B45309'}},'₹'+finalTotal(c)),h('div',{className:'muted',style:{fontSize:10}},fmtDT(c.date)))
+          h('div',{style:{textAlign:'right'}},h('div',{style:{fontWeight:700,color:'var(--primary)'}},'₹'+finalTotal(c)),h('div',{className:'muted',style:{fontSize:10}},fmtDT(c.date)))
         ),
         // key=c.id → switching orders remounts the panel, resetting its local
         // discount/adjustment/reason inputs instead of carrying over stale values.
@@ -1260,7 +1281,7 @@ function OrderPanel(props){
   }
   return h('div',{onClick:function(e){e.stopPropagation();}},
     h('div',{className:'hr'}),
-    h('div',{style:{fontSize:11,color:'#B45309',fontWeight:700,letterSpacing:0.5,marginBottom:4}},'➕ ADD ITEMS'),
+    h('div',{style:{fontSize:11,color:'var(--primary)',fontWeight:700,letterSpacing:0.5,marginBottom:4}},'➕ ADD ITEMS'),
     h('input',{placeholder:'Search menu…',value:q,onChange:function(e){setQ(e.target.value);},style:{marginBottom:6}}),
     h('div',{className:'cats'},cats.map(function(c){return h('button',{key:c,className:cat===c?'on':'',title:c,onClick:function(){setCat(c);},style:{fontSize:18,padding:'4px 10px',lineHeight:1}},catIcon(c));})),
     h('div',{className:'sb'},filtered.length===0?h('div',{style:{fontSize:12,color:'var(--text-2)',padding:8}},'No items.'):
@@ -1277,7 +1298,7 @@ function OrderPanel(props){
       })
     ),
     // ── Visible section divider between menu picker and current bill ──
-    cust.items.length>0&&h('div',{style:{borderTop:'2px dashed #B45309',marginTop:10,marginBottom:6,paddingTop:8}}),
+    cust.items.length>0&&h('div',{style:{borderTop:'2px dashed var(--primary)',marginTop:10,marginBottom:6,paddingTop:8}}),
     cust.items.length>0&&h('div',{className:'cur-order'},
       h('div',{style:{fontSize:11,color:'var(--green)',fontWeight:700,letterSpacing:0.5,marginBottom:6}},'🧾 CURRENT ORDER'),
       h('div',{className:'sb'},cust.items.map(function(it){
@@ -1335,7 +1356,7 @@ function OrderPanel(props){
     // Reason field — auto-enabled & mandatory when a discount/adjustment value is entered.
     h('div',{style:{marginBottom:4}},
       h('div',{className:'row bw',style:{marginBottom:3}},
-        h('span',{style:{fontSize:12,fontWeight:600,color:reasonNeeded?'#B45309':'var(--text-3)'}},
+        h('span',{style:{fontSize:12,fontWeight:600,color:reasonNeeded?'var(--primary)':'var(--text-3)'}},
           'Reason'+(reasonNeeded?' *':'')),
         reasonNeeded&&!reason.trim()&&h('span',{style:{fontSize:10,color:'#991B1B',fontWeight:700}},'Required')
       ),
@@ -1489,7 +1510,7 @@ function NewTab(props){
                   else if(v<minYMD){setMsg('Backdated bills are limited to the past 15 days.');v=minYMD;setTimeout(function(){setMsg('');},3000);}
                   setBillDate(v);
                 }}),
-              billDate!==todayYMD&&h('div',{style:{fontSize:10,color:'#B45309',marginTop:2,fontWeight:600}},'⚠ Backdated bill — '+billDate)
+              billDate!==todayYMD&&h('div',{style:{fontSize:10,color:'var(--primary)',marginTop:2,fontWeight:600}},'⚠ Backdated bill — '+billDate)
             )
           : h('div',null,
               h('input',{type:'date',value:todayYMD,disabled:true,style:{background:'var(--surface-2)'}}),
@@ -1543,12 +1564,12 @@ function HistoryTab(props){
           return h('div',{key:c.id,className:'li',style:{flexDirection:'column',alignItems:'stretch',gap:3,paddingBottom:6}},
             h('div',{className:'row bw'},
               h('span',{style:{fontWeight:700}},c.name+' · '+c.room),
-              h('div',{className:'row',style:{gap:4}},h('span',{style:{fontWeight:700,color:'#B45309'}},'₹'+t),
+              h('div',{className:'row',style:{gap:4}},h('span',{style:{fontWeight:700,color:'var(--primary)'}},'₹'+t),
                 h('button',{className:'btn xs',onClick:function(){setBillId(c.id);}},'🧾 Bill'))
             ),
-            h('div',{className:'row',style:{gap:5}},h('span',{className:'muted',style:{fontSize:10}},fmtDT(billDateTime(c))),h('span',{className:'tag-s'},'Settled'),c.bill_no&&h('span',{style:{fontSize:10,fontWeight:700,color:'#B45309'}},fmtBill(c.bill_no))),
+            h('div',{className:'row',style:{gap:5}},h('span',{className:'muted',style:{fontSize:10}},fmtDT(billDateTime(c))),h('span',{className:'tag-s'},'Settled'),c.bill_no&&h('span',{style:{fontSize:10,fontWeight:700,color:'var(--primary)'}},fmtBill(c.bill_no))),
             h('div',{style:{fontSize:11,color:'var(--text-2)'}},c.items.slice(0,3).map(function(i){return i.name+'×'+i.qty;}).join(', ')+(c.items.length>3?', …':'')),
-            (c.discount_on||c.adjustment_on)&&c.reason&&h('div',{style:{fontSize:11,color:'#B45309',fontStyle:'italic'}},'Reason: '+c.reason)
+            (c.discount_on||c.adjustment_on)&&c.reason&&h('div',{style:{fontSize:11,color:'var(--primary)',fontStyle:'italic'}},'Reason: '+c.reason)
           );
         })
       )
@@ -1688,13 +1709,13 @@ function HistoryTab(props){
                 var nm=su?(su.display_name||k.split('@')[0]):k;
                 return h('div',{key:k,className:'row bw',style:{fontSize:12,padding:'4px 0',borderBottom:'1px dotted var(--border)'}},
                   h('span',null,nm+' — '+byStaff[k].count+' bill'+(byStaff[k].count!==1?'s':'')),
-                  h('span',{style:{fontWeight:700,color:'#B45309'}},'₹'+byStaff[k].rev)
+                  h('span',{style:{fontWeight:700,color:'var(--primary)'}},'₹'+byStaff[k].rev)
                 );
               });
             })(),
             h('div',{className:'row bw',style:{fontSize:14,fontWeight:700,paddingTop:6,marginTop:2,borderTop:'2px solid #333'}},
               h('span',null,'TOTAL — '+todaySett.length+' bill'+(todaySett.length!==1?'s':'')),
-              h('span',{style:{color:'#B45309'}},'₹'+todayRev)
+              h('span',{style:{color:'var(--primary)'}},'₹'+todayRev)
             )
           )
     ),
@@ -1733,7 +1754,7 @@ function HistoryTab(props){
       ),
       h('div',{className:'row bw',style:{fontSize:11,color:'var(--text-2)',margin:'6px 0 8px'}},
         h('span',null,shown.length+' record'+(shown.length!==1?'s':'')+(hasFilter?' (filtered)':'')+(shown.length>PAGE_SIZE?' — page '+(safePage+1)+'/'+totalPages:'')),
-        shown.length>0&&h('span',{style:{fontWeight:700,color:'#B45309'}},'Total: ₹'+shownRev)
+        shown.length>0&&h('span',{style:{fontWeight:700,color:'var(--primary)'}},'Total: ₹'+shownRev)
       ),
       shown.length===0?h('div',{className:'empty'},'No records found.'):
       pageItems.map(function(c){
@@ -1744,18 +1765,18 @@ function HistoryTab(props){
           h('div',{className:'row bw'},
             h('span',{style:{fontWeight:700}},c.name+' · '+c.room),
             h('div',{className:'row',style:{gap:4}},
-              h('span',{style:{fontWeight:700,color:'#B45309'}},'₹'+t),
+              h('span',{style:{fontWeight:700,color:'var(--primary)'}},'₹'+t),
               h('button',{className:'btn xs',onClick:function(){setBillId(c.id);}},'🧾 Bill'),
               h('button',{className:'btn btn-r xs',onClick:function(){delCust(c.id);}},'🗑')
             )
           ),
           h('div',{className:'row',style:{gap:5,flexWrap:'wrap'}},
-            c.settled_at&&h('span',{className:'muted',style:{fontSize:10}},fmtDT(billDateTime(c))),c.bill_no&&h('span',{style:{fontSize:10,fontWeight:700,color:'#B45309'}},fmtBill(c.bill_no)),
+            c.settled_at&&h('span',{className:'muted',style:{fontSize:10}},fmtDT(billDateTime(c))),c.bill_no&&h('span',{style:{fontSize:10,fontWeight:700,color:'var(--primary)'}},fmtBill(c.bill_no)),
             h('span',{className:'tag-s'},'Settled'),
             sn&&h('span',{style:{fontSize:10,color:'var(--text-2)'}},'by '+sn)
           ),
           h('div',{style:{fontSize:11,color:'var(--text-2)'}},c.items.slice(0,3).map(function(i){return i.name+'×'+i.qty;}).join(', ')+(c.items.length>3?', …':'')),
-          (c.discount_on||c.adjustment_on)&&c.reason&&h('div',{style:{fontSize:11,color:'#B45309',fontStyle:'italic'}},'Reason: '+c.reason)
+          (c.discount_on||c.adjustment_on)&&c.reason&&h('div',{style:{fontSize:11,color:'var(--primary)',fontStyle:'italic'}},'Reason: '+c.reason)
         );
       }),
       // Pagination controls
@@ -1900,7 +1921,7 @@ function MenuTab(props){
           return h('div',{key:it.id,'data-itemid':it.id,className:'li',style:{opacity:avail?1:0.55}},
             h('span',{className:'dh',title:'Drag to reorder',style:{cursor:'grab',touchAction:'none',userSelect:'none',color:'var(--text-3)',padding:'0 4px',fontSize:14,fontWeight:700,flexShrink:0}},'⋮⋮'),
             h('span',{style:{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},it.name,!avail&&h('span',{style:{fontSize:10,color:'#991B1B',fontWeight:700,marginLeft:5}},'OUT OF STOCK')),
-            h('span',{style:{fontWeight:700,color:'#B45309',minWidth:40,textAlign:'right'}},'₹'+it.price),
+            h('span',{style:{fontWeight:700,color:'var(--primary)',minWidth:40,textAlign:'right'}},'₹'+it.price),
             h('button',{className:'btn xs '+(avail?'btn-r':'btn-g'),style:{marginLeft:8},onClick:function(){toggleMenuAvail(it.id,!avail);}},avail?'Mark Out':'Mark In'),
             h('button',{className:'btn xs',onClick:function(){setEditId(it.id);setEditN(it.name);setEditP(''+it.price);}},'✏ Edit'),
             h('button',{className:'btn btn-r xs',onClick:function(){deleteMenuItem(it.id);}},'🗑 Del')
@@ -2361,8 +2382,8 @@ function ManagerTab(props){
       h('div',{className:'gauge-wrap'},
         h('svg',{className:'gauge-svg',viewBox:'0 0 100 100'},
           h('defs',null,h('linearGradient',{id:'gaugeGrad',x1:'0',y1:'0',x2:'1',y2:'1'},
-            h('stop',{offset:'0%',stopColor:'#f59e0b'}),
-            h('stop',{offset:'100%',stopColor:'#b45309'}))),
+            h('stop',{offset:'0%',style:{stopColor:'var(--primary)'}}),
+            h('stop',{offset:'100%',style:{stopColor:'var(--primary-700)'}}))),
           h('circle',{className:'gauge-arc-bg',cx:50,cy:50,r:R,strokeWidth:9,strokeDasharray:ARC+' '+C}),
           h('circle',{className:'gauge-arc-fg',cx:50,cy:50,r:R,strokeWidth:9,strokeDasharray:ARC+' '+C,strokeDashoffset:off})
         ),
@@ -2444,7 +2465,7 @@ function ManagerTab(props){
       h('div',{className:'heat'},hours.map(function(v,hr){
         var op=v?(0.18+0.82*(v/maxHour)):0.12;
         return h('div',{key:hr,className:'heat-cell',title:hr+':00 — '+v+' bills',
-          style:{background:'rgba(180,83,9,'+op.toFixed(2)+')'}});
+          style:{background:'rgba(var(--primary-rgb),'+op.toFixed(2)+')'}});
       })),
       h('div',{className:'row bw',style:{marginTop:2}},['12a','6a','12p','6p','11p'].map(function(l,idx){
         return h('div',{key:idx,className:'heat-x',style:{flex:'none'}},l);
@@ -2718,7 +2739,7 @@ function BillModal(props){
           if((cust.discount_on||cust.adjustment_on)&&cust.reason) rowsB.push(h('div',{key:'r',style:{fontSize:11,color:'var(--text-2)',fontStyle:'italic',marginBottom:2}},'Reason: '+cust.reason));
           return h('div',{style:{marginBottom:6}},rowsB);
         })(),
-        h('div',{style:{display:'flex',justifyContent:'space-between',fontWeight:700,fontSize:16}},h('span',null,'Total'),h('span',{style:{color:'#B45309'}},'₹'+t)),
+        h('div',{style:{display:'flex',justifyContent:'space-between',fontWeight:700,fontSize:16}},h('span',null,'Total'),h('span',{style:{color:'var(--primary)'}},'₹'+t)),
         h('div',{style:{textAlign:'center',fontSize:11,color:'var(--text-2)',marginTop:12}},'Thank you for visiting Gavthan!')
         )
       )
