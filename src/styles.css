@@ -378,13 +378,14 @@ select{appearance:none;-webkit-appearance:none;
   padding:24px;
   color:var(--text);
 }
+/* Framed like a post-login dashboard window: same 480px max-width + surface +
+   hairline ring, sitting on the page background (not a full-viewport field). */
 .login-box{
   background:var(--surface);
-  border:1px solid var(--border);
-  border-radius:18px;
-  padding:32px 28px;
-  width:100%;max-width:392px;
-  box-shadow:var(--shadow-lg);
+  border-radius:16px;
+  padding:34px 30px;
+  width:100%;max-width:480px;
+  box-shadow:0 0 0 1px var(--border), var(--shadow-lg);
 }
 .login-logo{text-align:center;font-size:27px;font-weight:800;margin-bottom:6px;letter-spacing:-.02em;color:var(--text)}
 .login-logo em{
@@ -489,7 +490,7 @@ select{appearance:none;-webkit-appearance:none;
 /* Hide Google Translate's injected chrome (top banner, tooltip, gadget) — we drive
    it from the header icon. Static so it applies even when a persisted googtrans
    cookie re-translates on load, before our JS runs. */
-.goog-te-banner-frame.skiptranslate,.goog-te-banner-frame,#goog-gt-tt,.goog-te-balloon-frame,.goog-te-gadget-icon{display:none!important}
+.goog-te-banner-frame,.VIpgJd-ZVi9od-ORHb-OEVmcd,iframe.skiptranslate,#goog-gt-tt,.goog-te-balloon-frame,.goog-te-gadget-icon{display:none!important}
 body{top:0!important;position:static!important}
 .goog-text-highlight{background:none!important;box-shadow:none!important}
 #google_translate_element{position:absolute!important;left:-9999px!important;top:0!important;width:1px;height:1px;overflow:hidden}

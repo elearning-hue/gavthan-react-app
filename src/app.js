@@ -262,6 +262,18 @@ function ThemeToggle(){
 // drives its hidden <select> to switch the page en↔mr in place — no visible
 // "Select Language" gadget, just the icon in the header.
 var _gtReady=null;
+// Protect user-editable controls from translation so typing (and restoring back
+// to English) can never alter their values. Runs continuously via an observer.
+function gtTagInputs(){
+  try{
+    var els=document.querySelectorAll('input,textarea,select');
+    for(var i=0;i<els.length;i++){var e=els[i];if(e.getAttribute('translate')!=='no'){e.setAttribute('translate','no');e.classList.add('notranslate');}}
+  }catch(e){}
+}
+function gtClearCookie(){
+  try{['',';domain='+location.hostname,';domain=.'+location.hostname].forEach(function(d){
+    document.cookie='googtrans=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT'+d;});}catch(e){}
+}
 function ensureGoogleTranslate(){
   if(_gtReady)return _gtReady;
   // Guard React against the classic removeChild/insertBefore DOMException that
@@ -275,10 +287,9 @@ function ensureGoogleTranslate(){
       Node.prototype.insertBefore=function(n,r){if(r&&r.parentNode!==this){return n;}return ib.apply(this,arguments);};
     }
   }catch(e){}
+  gtTagInputs();
+  try{if(!window.__gtObs){window.__gtObs=new MutationObserver(function(){gtTagInputs();});window.__gtObs.observe(document.body,{childList:true,subtree:true});}}catch(e){}
   _gtReady=new Promise(function(resolve){
-    var style=document.createElement('style');
-    style.textContent='.goog-te-banner-frame.skiptranslate,#goog-gt-tt,.goog-te-balloon-frame,.goog-te-gadget-icon{display:none!important}body{top:0!important}#google_translate_element{position:absolute!important;left:-9999px!important;top:0!important;width:1px;height:1px;overflow:hidden}.goog-text-highlight{background:none!important;box-shadow:none!important}';
-    document.head.appendChild(style);
     var cont=document.getElementById('google_translate_element');
     if(!cont){cont=document.createElement('div');cont.id='google_translate_element';document.body.appendChild(cont);}
     window.googleTranslateElementInit=function(){
@@ -290,9 +301,9 @@ function ensureGoogleTranslate(){
     document.body.appendChild(s);
     var tries=0;
     var iv=setInterval(function(){
-      if(document.querySelector('.goog-te-combo')){clearInterval(iv);resolve(true);}
-      else if(++tries>60){clearInterval(iv);resolve(false);} // ~15s timeout
-    },250);
+      if(document.querySelector('.goog-te-combo')){clearInterval(iv);setTimeout(function(){resolve(true);},200);} // let GT bind its change handler
+      else if(++tries>60){clearInterval(iv);resolve(false);} // ~12s timeout
+    },200);
   });
   return _gtReady;
 }
@@ -304,16 +315,20 @@ function gtSetLang(lang){
   return true;
 }
 function TranslateToggle(){
-  var _on=useState(false);var on=_on[0];var setOn=_on[1];
+  // Initial state follows a persisted googtrans cookie (Marathi survives reloads).
+  var _on=useState(function(){try{return /googtrans=[^;]*\/mr/.test(document.cookie);}catch(e){return false;}});var on=_on[0];var setOn=_on[1];
   var _busy=useState(false);var busy=_busy[0];var setBusy=_busy[1];
   function toggle(){
     if(busy)return;
-    if(on){gtSetLang('en');setOn(false);return;} // back to original English
+    if(on){gtSetLang('en');gtClearCookie();setOn(false);return;} // restore original English
     setBusy(true);
+    // Load the widget (once) then translate — awaiting readiness makes it a single
+    // click. Not preloaded: GT stays dormant until asked, so it never rewrites live
+    // data (or the user's typing) unless translation is actually on.
     ensureGoogleTranslate().then(function(ok){
       setBusy(false);
       if(!ok){alert('Could not load Google Translate. Check your internet connection.');return;}
-      if(gtSetLang('mr'))setOn(true);
+      gtSetLang('mr');setOn(true);
     });
   }
   return h('button',{className:'theme-toggle tr'+(on?' on':''),translate:'no',
@@ -1317,6 +1332,7 @@ function OrderPanel(props){
   var _disc=useState(String(cust.discount_pct||''));var disc=_disc[0];var setDisc=_disc[1];
   var _adj=useState(String(cust.adjustment||''));var adj=_adj[0];var setAdj=_adj[1];
   var _reason=useState(cust.reason||'');var reason=_reason[0];var setReason=_reason[1];
+  var _kot=useState(false);var kotOpen=_kot[0];var setKotOpen=_kot[1];
   // Reason is needed (enabled + mandatory) whenever a discount % or a non-zero adjustment is entered.
   // Derived from live input state so it toggles instantly as the user types.
   var reasonNeeded=(Number(disc)||0)>0||(Number(adj)||0)!==0;
@@ -1438,9 +1454,37 @@ function OrderPanel(props){
     h('div',{className:'hr'}),
     h('div',{className:'row',style:{gap:5}},
       h('button',{className:'btn xs',onClick:function(){setBillId(cust.id);}},'🧾 Bill'),
-      h('button',{className:'btn xs',onClick:printKOT},'👨‍🍳 KOT'),
+      h('button',{className:'btn xs',onClick:function(){if(!cust.items.length){alert('No items to send to kitchen.');return;}setKotOpen(true);}},'👨‍🍳 KOT'),
       h('button',{className:'btn btn-g xs',onClick:function(){settle(cust.id);}},'✓ Settle'),
       h('button',{className:'btn btn-r xs',onClick:function(){delCust(cust.id);}},'🗑')
+    ),
+    // KOT confirmation modal (mirrors the Bill button's modal workflow): preview
+    // the kitchen ticket, then Print or Cancel — no direct-to-printer send.
+    kotOpen&&h('div',{className:'ovl',onClick:function(){setKotOpen(false);}},
+      h('div',{className:'modal',style:{maxWidth:380},onClick:function(e){e.stopPropagation();}},
+        h('div',{className:'mhdr'},
+          h('span',{style:{fontWeight:700,fontSize:13}},'👨‍🍳 Kitchen Order (KOT)'),
+          h('button',{className:'btn xs',onClick:function(){setKotOpen(false);}},'✕')
+        ),
+        h('div',{className:'mbody'},
+          h('div',{className:'muted',style:{fontSize:11,marginBottom:8}},
+            'Send '+cust.items.length+' item'+(cust.items.length!==1?'s':'')+' to the kitchen for '+(cust.name||'this order')+
+            (cust.room?' · '+cust.room:'')+'?'),
+          h('div',{className:'cur-order'},
+            cust.items.map(function(it){
+              return h('div',{key:it.id,className:'li'},
+                h(Chip,{cat:it.cat,cats}),
+                h('div',{style:{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},it.name),
+                h('span',{style:{fontWeight:700,minWidth:30,textAlign:'right'}},'×'+it.qty)
+              );
+            })
+          ),
+          h('div',{className:'row',style:{gap:6,marginTop:12}},
+            h('button',{className:'btn',style:{flex:1,justifyContent:'center'},onClick:function(){setKotOpen(false);}},'Cancel'),
+            h('button',{className:'btn btn-a',style:{flex:1,justifyContent:'center'},onClick:function(){setKotOpen(false);printKOT();}},'🖨 Print')
+          )
+        )
+      )
     )
   );
 }
