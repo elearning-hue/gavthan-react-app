@@ -262,14 +262,6 @@ function ThemeToggle(){
 // drives its hidden <select> to switch the page en↔mr in place — no visible
 // "Select Language" gadget, just the icon in the header.
 var _gtReady=null;
-// Protect user-editable controls from translation so typing (and restoring back
-// to English) can never alter their values. Runs continuously via an observer.
-function gtTagInputs(){
-  try{
-    var els=document.querySelectorAll('input,textarea,select');
-    for(var i=0;i<els.length;i++){var e=els[i];if(e.getAttribute('translate')!=='no'){e.setAttribute('translate','no');e.classList.add('notranslate');}}
-  }catch(e){}
-}
 function gtClearCookie(){
   try{['',';domain='+location.hostname,';domain=.'+location.hostname].forEach(function(d){
     document.cookie='googtrans=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT'+d;});}catch(e){}
@@ -287,8 +279,6 @@ function ensureGoogleTranslate(){
       Node.prototype.insertBefore=function(n,r){if(r&&r.parentNode!==this){return n;}return ib.apply(this,arguments);};
     }
   }catch(e){}
-  gtTagInputs();
-  try{if(!window.__gtObs){window.__gtObs=new MutationObserver(function(){gtTagInputs();});window.__gtObs.observe(document.body,{childList:true,subtree:true});}}catch(e){}
   _gtReady=new Promise(function(resolve){
     var cont=document.getElementById('google_translate_element');
     if(!cont){cont=document.createElement('div');cont.id='google_translate_element';document.body.appendChild(cont);}
@@ -1471,25 +1461,27 @@ function OrderPanel(props){
           h('button',{className:'btn xs',onClick:function(){setKotOpen(false);}},'✕')
         ),
         h('div',{className:'mbody'},
-          h('div',{className:'muted',style:{fontSize:11,marginBottom:8}},
-            'Send '+cust.items.length+' item'+(cust.items.length!==1?'s':'')+' to the kitchen for ',
-            h('span',{translate:'no',style:{fontWeight:700}},cust.name||'this order'),
-            (cust.room?' · '+cust.room:'')+'?'),
-          h('div',{className:'cur-order'},
+          // Actual kitchen-ticket preview (item names + every add-time + count) —
+          // the real KOT content, not a copy of the order panel. translate:'no' keeps
+          // it exactly as entered (names + the ticket format) like the printed KOT.
+          h('div',{className:'cur-order',translate:'no',style:{fontSize:13}},
+            h('div',{style:{textAlign:'center',borderBottom:'1px dashed var(--border)',paddingBottom:8,marginBottom:8}},
+              h('div',{style:{fontSize:16,fontWeight:800,letterSpacing:2}},'KITCHEN ORDER'),
+              h('div',{style:{fontSize:11,color:'var(--text-2)'}},HOTEL_NAME+' — KOT')
+            ),
+            h('div',{style:{fontSize:12}},h('strong',null,cust.name||'—'),'   Room/Table: ',h('strong',null,cust.room||'—')),
+            h('div',{style:{fontSize:11,color:'var(--text-2)',borderBottom:'1px dashed var(--border)',paddingBottom:8,marginBottom:6}},dateOf(cust.date)+'   '+timeStr()),
             cust.items.map(function(it){
               var tms=itemTimes(it);
-              return h('div',{key:it.id,className:'li'},
-                h(Chip,{cat:it.cat,cats}),
-                h('div',{style:{flex:1,minWidth:0},translate:'no'},
-                  h('div',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},it.name),
-                  tms.length>0&&h('div',{style:{fontSize:9,color:'var(--text-3)'}},
-                    tms.length<=3
-                      ? tms.map(timeOf).join(' · ')
-                      : timeOf(tms[0])+' … '+timeOf(tms[tms.length-1])+' ('+tms.length+'×)')
+              return h('div',{key:it.id,style:{padding:'6px 0',borderBottom:'1px dotted var(--border)'}},
+                h('div',{style:{display:'flex',justifyContent:'space-between',gap:8,fontWeight:700,fontSize:14}},
+                  h('span',null,it.name),
+                  h('span',{style:{flexShrink:0}},'×'+(Number(it.qty)||0))
                 ),
-                h('span',{style:{fontWeight:700,minWidth:30,textAlign:'right'}},'×'+it.qty)
+                tms.length>0&&h('div',{style:{fontSize:9,color:'var(--text-3)',marginTop:2,lineHeight:1.5}},tms.map(timeOf).join(' · '))
               );
-            })
+            }),
+            h('div',{style:{textAlign:'center',fontSize:10,color:'var(--text-2)',marginTop:10}},'--- Prepare above items ---')
           ),
           h('div',{className:'row',style:{gap:6,marginTop:12}},
             h('button',{className:'btn',style:{flex:1,justifyContent:'center'},onClick:function(){setKotOpen(false);}},'Cancel'),
