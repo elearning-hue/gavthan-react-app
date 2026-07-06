@@ -257,6 +257,73 @@ function ThemeToggle(){
     'aria-label':'Toggle theme',onClick:flip},t==='dark'?'☀':'☾');
 }
 
+// ── Google Translate → Marathi ─────────────────────
+// Lazily loads Google's website-translate widget (hidden) on first tap, then
+// drives its hidden <select> to switch the page en↔mr in place — no visible
+// "Select Language" gadget, just the icon in the header.
+var _gtReady=null;
+function ensureGoogleTranslate(){
+  if(_gtReady)return _gtReady;
+  // Guard React against the classic removeChild/insertBefore DOMException that
+  // Google Translate causes by rewriting text nodes React still owns.
+  try{
+    if(!window.__gtNodePatch&&typeof Node==='function'&&Node.prototype){
+      window.__gtNodePatch=true;
+      var rm=Node.prototype.removeChild;
+      Node.prototype.removeChild=function(c){if(c&&c.parentNode!==this){return c;}return rm.apply(this,arguments);};
+      var ib=Node.prototype.insertBefore;
+      Node.prototype.insertBefore=function(n,r){if(r&&r.parentNode!==this){return n;}return ib.apply(this,arguments);};
+    }
+  }catch(e){}
+  _gtReady=new Promise(function(resolve){
+    var style=document.createElement('style');
+    style.textContent='.goog-te-banner-frame.skiptranslate,#goog-gt-tt,.goog-te-balloon-frame,.goog-te-gadget-icon{display:none!important}body{top:0!important}#google_translate_element{position:absolute!important;left:-9999px!important;top:0!important;width:1px;height:1px;overflow:hidden}.goog-text-highlight{background:none!important;box-shadow:none!important}';
+    document.head.appendChild(style);
+    var cont=document.getElementById('google_translate_element');
+    if(!cont){cont=document.createElement('div');cont.id='google_translate_element';document.body.appendChild(cont);}
+    window.googleTranslateElementInit=function(){
+      try{new window.google.translate.TranslateElement({pageLanguage:'en',includedLanguages:'en,mr',autoDisplay:false},'google_translate_element');}catch(e){}
+    };
+    var s=document.createElement('script');
+    s.src='https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
+    s.onerror=function(){resolve(false);};
+    document.body.appendChild(s);
+    var tries=0;
+    var iv=setInterval(function(){
+      if(document.querySelector('.goog-te-combo')){clearInterval(iv);resolve(true);}
+      else if(++tries>60){clearInterval(iv);resolve(false);} // ~15s timeout
+    },250);
+  });
+  return _gtReady;
+}
+function gtSetLang(lang){
+  var combo=document.querySelector('.goog-te-combo');
+  if(!combo)return false;
+  combo.value=lang;
+  combo.dispatchEvent(new Event('change'));
+  return true;
+}
+function TranslateToggle(){
+  var _on=useState(false);var on=_on[0];var setOn=_on[1];
+  var _busy=useState(false);var busy=_busy[0];var setBusy=_busy[1];
+  function toggle(){
+    if(busy)return;
+    if(on){gtSetLang('en');setOn(false);return;} // back to original English
+    setBusy(true);
+    ensureGoogleTranslate().then(function(ok){
+      setBusy(false);
+      if(!ok){alert('Could not load Google Translate. Check your internet connection.');return;}
+      if(gtSetLang('mr'))setOn(true);
+    });
+  }
+  return h('button',{className:'theme-toggle tr'+(on?' on':''),translate:'no',
+    title:on?'Show original (English)':'Translate to Marathi (Google)','aria-label':'Translate page to Marathi',
+    onClick:toggle,disabled:busy},
+    busy?h('span',{className:'spin'}):h('svg',{width:16,height:16,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round','aria-hidden':'true'},
+      h('path',{key:1,d:'m5 8 6 6'}),h('path',{key:2,d:'m4 14 6-6 2-3'}),h('path',{key:3,d:'M2 5h12'}),
+      h('path',{key:4,d:'M7 2h1'}),h('path',{key:5,d:'m22 22-5-10-5 10'}),h('path',{key:6,d:'M14 18h6'})));
+}
+
 // ── HELPERS ────────────────────────────────────────
 function tot(items){return items.reduce(function(s,i){return s+i.price*i.qty;},0);}
 // Raw items total
@@ -1190,6 +1257,7 @@ function App(props){
             boxShadow:dbOk?'0 0 4px #22c55e':'none'}}),
         h('span',{style:{fontSize:12,color:'var(--text-2)',whiteSpace:'nowrap'}},'Hi ',h('strong',null,displayName)),
         h('span',{className:admin?'badge-admin':'badge-user'},admin?'Admin':'Staff'),
+        h(TranslateToggle,null),
         h(ThemeToggle,null),
         h('button',{className:'btn xs btn-r',onClick:logout},'⏻ Sign Out')
       )

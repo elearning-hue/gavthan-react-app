@@ -365,73 +365,61 @@ select{appearance:none;-webkit-appearance:none;
 .editrow{background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:9px;padding:9px;margin-bottom:5px}
 
 /* ── Login ──────────────────────────────────────────────────────────────── */
-/* Pre-auth screens (login / setup / reset / error) use a fixed OLED-dark,
-   content-first treatment regardless of the in-app theme. */
+/* Pre-auth screens (login / setup / reset / error) are theme-adaptive — light on
+   the light theme, dark on the dark theme — so they match the surrounding page.
+   Accent follows --primary (terracotta in light, indigo in dark). */
 .login-wrap{
   min-height:100vh;min-height:100dvh;
   display:flex;align-items:center;justify-content:center;
   background:
-    radial-gradient(680px 380px at 50% -8%, rgba(138,164,255,.10), transparent 60%),
-    radial-gradient(520px 360px at 100% 112%, rgba(37,99,235,.06), transparent 55%),
-    #08090a;
+    radial-gradient(680px 380px at 50% -8%, rgba(var(--primary-rgb),.08), transparent 60%),
+    var(--bg-glow, transparent),
+    var(--bg);
   padding:24px;
-  color:#f4f4f5;
+  color:var(--text);
 }
 .login-box{
-  background:#131416;
-  border:1px solid rgba(255,255,255,.08);
+  background:var(--surface);
+  border:1px solid var(--border);
   border-radius:18px;
   padding:32px 28px;
   width:100%;max-width:392px;
-  box-shadow:0 24px 64px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.04);
+  box-shadow:var(--shadow-lg);
 }
-.login-logo{text-align:center;font-size:27px;font-weight:800;margin-bottom:6px;letter-spacing:-.02em;color:#f4f4f5}
+.login-logo{text-align:center;font-size:27px;font-weight:800;margin-bottom:6px;letter-spacing:-.02em;color:var(--text)}
 .login-logo em{
-  color:#8aa4ff;font-style:normal;
-  background:linear-gradient(120deg,#8aa4ff,#a9bcff);
+  color:var(--primary);font-style:normal;
+  background:linear-gradient(120deg,var(--primary),var(--primary-600));
   -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
 }
-.login-sub{text-align:center;font-size:12.5px;color:#a1a1aa;margin-bottom:26px}
+.login-sub{text-align:center;font-size:12.5px;color:var(--text-2);margin-bottom:26px}
 .fld{margin-bottom:15px}
-.fld label{display:block;font-size:11px;font-weight:700;color:#a1a1aa;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
-/* Dark inputs, scoped to the login card (global input styles stay token-based) */
-.login-box input{
-  background:#0e0f10;border:1px solid rgba(255,255,255,.10);color:#f4f4f5;
-  border-radius:10px;min-height:46px;transition:border-color .15s,box-shadow .15s;
-}
-.login-box input::placeholder{color:#6b6b73}
-.login-box input:focus{outline:none;border-color:#8aa4ff;box-shadow:0 0 0 3px rgba(138,164,255,.22)}
+.fld label{display:block;font-size:11px;font-weight:700;color:var(--text-2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.login-box input{border-radius:10px;min-height:46px}
 /* Password field with show/hide toggle */
 .pw-wrap{position:relative}
 .pw-wrap input{padding-right:46px}
 .pw-toggle{
   position:absolute;top:0;right:0;height:100%;width:46px;
   display:flex;align-items:center;justify-content:center;
-  background:none;border:none;cursor:pointer;color:#8b8b93;transition:color .15s;
+  background:none;border:none;cursor:pointer;color:var(--text-3);transition:color .15s;
 }
-.pw-toggle:hover{color:#f4f4f5}
-.pw-toggle:focus-visible{outline:none;color:#8aa4ff;box-shadow:0 0 0 3px rgba(138,164,255,.22);border-radius:8px}
-/* Login primary button — accessible dark-text-on-amber (white-on-amber fails AA) */
-.login-box .btn-a{background:#8aa4ff!important;border-color:#8aa4ff!important;color:#0d1220!important;box-shadow:none!important;min-height:46px;font-size:13px}
-.login-box .btn-a:hover{background:#9db3ff!important;border-color:#9db3ff!important}
-.login-box .btn-a:disabled{opacity:.5}
-.login-link{color:#8aa4ff;cursor:pointer;font-weight:600;transition:color .15s}
-.login-link:hover{color:#a9bcff}
-.login-foot{text-align:center;font-size:11.5px;color:#8b8b93}
-/* Message chips scoped to the dark login card (global .msg-* unchanged) */
-.login-box .msg-err{background:rgba(220,38,38,.12);color:#fca5a5;border-color:rgba(248,113,113,.28)}
-.login-box .msg-ok{background:rgba(5,150,105,.12);color:#6ee7b7;border-color:rgba(52,211,153,.28)}
-.login-box .setup-banner{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.09);color:#c9c9cf}
+.pw-toggle:hover{color:var(--text)}
+.pw-toggle:focus-visible{outline:none;color:var(--primary);box-shadow:var(--ring);border-radius:8px}
+.login-box .btn-a{min-height:46px;font-size:13px}
+.login-link{color:var(--primary);cursor:pointer;font-weight:600;transition:color .15s}
+.login-link:hover{color:var(--primary-600)}
+.login-foot{text-align:center;font-size:11.5px;color:var(--text-3)}
 /* Lockout state */
 .lock-card{text-align:center;padding:6px 2px 2px}
 .lock-ic{
   width:48px;height:48px;margin:0 auto 14px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;
-  background:rgba(220,38,38,.12);color:#fca5a5;
+  background:var(--red-bg);color:var(--red);
 }
-.lock-title{font-size:15px;font-weight:700;color:#f4f4f5;margin-bottom:6px}
-.lock-msg{font-size:12.5px;color:#a1a1aa;line-height:1.6;margin-bottom:18px}
-.lock-timer{font-variant-numeric:tabular-nums;font-feature-settings:"tnum";font-size:34px;font-weight:800;letter-spacing:.02em;color:#f4f4f5}
+.lock-title{font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px}
+.lock-msg{font-size:12.5px;color:var(--text-2);line-height:1.6;margin-bottom:18px}
+.lock-timer{font-variant-numeric:tabular-nums;font-feature-settings:"tnum";font-size:34px;font-weight:800;letter-spacing:.02em;color:var(--text)}
 .lock-timer-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#71717a;margin-top:2px}
 @media (prefers-reduced-motion:reduce){
   .login-box input,.pw-toggle,.login-link,.login-box .btn-a{transition:none}
@@ -493,6 +481,18 @@ select{appearance:none;-webkit-appearance:none;
   -webkit-tap-highlight-color:transparent;
 }
 .theme-toggle:hover{color:var(--primary);border-color:var(--primary);transform:rotate(-12deg)}
+/* Translate icon: same round button, no rotate; "on" = actively translated */
+.theme-toggle.tr:hover{transform:none}
+.theme-toggle.on{background:var(--primary-tint);color:var(--primary);border-color:var(--primary)}
+.theme-toggle .spin{width:14px;height:14px}
+
+/* Hide Google Translate's injected chrome (top banner, tooltip, gadget) — we drive
+   it from the header icon. Static so it applies even when a persisted googtrans
+   cookie re-translates on load, before our JS runs. */
+.goog-te-banner-frame.skiptranslate,.goog-te-banner-frame,#goog-gt-tt,.goog-te-balloon-frame,.goog-te-gadget-icon{display:none!important}
+body{top:0!important;position:static!important}
+.goog-text-highlight{background:none!important;box-shadow:none!important}
+#google_translate_element{position:absolute!important;left:-9999px!important;top:0!important;width:1px;height:1px;overflow:hidden}
 
 .glass{
   background:var(--glass);
