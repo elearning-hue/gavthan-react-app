@@ -317,24 +317,21 @@ function gtSetLang(lang){
 function TranslateToggle(){
   // Initial state follows a persisted googtrans cookie (Marathi survives reloads).
   var _on=useState(function(){try{return /googtrans=[^;]*\/mr/.test(document.cookie);}catch(e){return false;}});var on=_on[0];var setOn=_on[1];
-  var _busy=useState(false);var busy=_busy[0];var setBusy=_busy[1];
+  // Preload the hidden widget on mount so the FIRST tap is instant (no load delay).
+  // Safe now that displayed data is tagged translate="no" — a preloaded/idle widget
+  // won't rewrite names, menu items, or amounts.
+  useEffect(function(){ensureGoogleTranslate();},[]);
   function toggle(){
-    if(busy)return;
     if(on){gtSetLang('en');gtClearCookie();setOn(false);return;} // restore original English
-    setBusy(true);
-    // Load the widget (once) then translate — awaiting readiness makes it a single
-    // click. Not preloaded: GT stays dormant until asked, so it never rewrites live
-    // data (or the user's typing) unless translation is actually on.
-    ensureGoogleTranslate().then(function(ok){
-      setBusy(false);
-      if(!ok){alert('Could not load Google Translate. Check your internet connection.');return;}
-      gtSetLang('mr');setOn(true);
-    });
+    // Preloaded → apply on this single click. If the script is still loading (slow
+    // network), apply the moment it's ready — still one tap.
+    if(gtSetLang('mr')){setOn(true);return;}
+    ensureGoogleTranslate().then(function(ok){if(ok&&gtSetLang('mr')){setOn(true);}else if(!ok){alert('Could not load Google Translate. Check your internet connection.');}});
   }
   return h('button',{className:'theme-toggle tr'+(on?' on':''),translate:'no',
     title:on?'Show original (English)':'Translate to Marathi (Google)','aria-label':'Translate page to Marathi',
-    onClick:toggle,disabled:busy},
-    busy?h('span',{className:'spin'}):h('svg',{width:16,height:16,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round','aria-hidden':'true'},
+    onClick:toggle},
+    h('svg',{width:16,height:16,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round','aria-hidden':'true'},
       h('path',{key:1,d:'m5 8 6 6'}),h('path',{key:2,d:'m4 14 6-6 2-3'}),h('path',{key:3,d:'M2 5h12'}),
       h('path',{key:4,d:'M7 2h1'}),h('path',{key:5,d:'m22 22-5-10-5 10'}),h('path',{key:6,d:'M14 18h6'})));
 }
