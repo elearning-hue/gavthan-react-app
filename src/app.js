@@ -1270,7 +1270,7 @@ function App(props){
           style:{width:8,height:8,borderRadius:'50%',flexShrink:0,
             background:dbOk===null?'#d1d5db':dbOk?'#22c55e':'#ef4444',
             boxShadow:dbOk?'0 0 4px #22c55e':'none'}}),
-        h('span',{style:{fontSize:12,color:'var(--text-2)',whiteSpace:'nowrap'}},'Hi ',h('strong',null,displayName)),
+        h('span',{style:{fontSize:12,color:'var(--text-2)',whiteSpace:'nowrap'}},'Hi ',h('strong',{translate:'no'},displayName)),
         h('span',{className:admin?'badge-admin':'badge-user'},admin?'Admin':'Staff'),
         h(TranslateToggle,null),
         h(ThemeToggle,null),
@@ -1310,7 +1310,7 @@ function OrdersTab(props){
     list.length===0&&h('div',{className:'empty card'},'No active customers. Tap + to add.'),
     list.map(function(c){
       return h('div',{key:c.id,className:'ccard'+(c.id===selId?' sel':''),onClick:function(){setSelId(c.id===selId?null:c.id);}},
-        h('div',{className:'row bw'},
+        h('div',{className:'row bw',translate:'no'},
           h('div',null,h('div',{style:{fontWeight:700}},c.name),h('div',{className:'muted',style:{fontSize:11}},c.room+(c.phone?' · '+c.phone:''))),
           h('div',{style:{textAlign:'right'}},h('div',{style:{fontWeight:700,color:'var(--primary)'}},'₹'+finalTotal(c)),h('div',{className:'muted',style:{fontSize:10}},fmtDT(c.date)))
         ),
@@ -1373,7 +1373,7 @@ function OrderPanel(props){
         var inO=cust.items.find(function(i){return i.id===mi.id;});
         return h('div',{key:mi.id,className:'mi-pick'+(inO?' in':''),onClick:function(){upsertItem(cust.id,mi.id,1);}},
           h(Chip,{cat:mi.cat,cats}),
-          h('span',{className:'mi-name'},mi.name),
+          h('span',{className:'mi-name',translate:'no'},mi.name),
           h('span',{className:'mi-price'},'₹'+mi.price),
           inO&&h('button',{className:'qb',onClick:function(e){e.stopPropagation();upsertItem(cust.id,mi.id,-1);}},'−'),
           inO&&h('span',{className:'mi-qty'},inO.qty),
@@ -1389,7 +1389,7 @@ function OrderPanel(props){
         var tms=itemTimes(it);
         return h('div',{key:it.id,className:'li'},
           h(Chip,{cat:it.cat,cats}),
-          h('div',{style:{flex:1,minWidth:0}},
+          h('div',{style:{flex:1,minWidth:0},translate:'no'},
             h('div',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},it.name),
             tms.length>0&&h('div',{style:{fontSize:9,color:'var(--text-3)'}},
               tms.length<=3
@@ -1468,13 +1468,21 @@ function OrderPanel(props){
         ),
         h('div',{className:'mbody'},
           h('div',{className:'muted',style:{fontSize:11,marginBottom:8}},
-            'Send '+cust.items.length+' item'+(cust.items.length!==1?'s':'')+' to the kitchen for '+(cust.name||'this order')+
+            'Send '+cust.items.length+' item'+(cust.items.length!==1?'s':'')+' to the kitchen for ',
+            h('span',{translate:'no',style:{fontWeight:700}},cust.name||'this order'),
             (cust.room?' · '+cust.room:'')+'?'),
           h('div',{className:'cur-order'},
             cust.items.map(function(it){
+              var tms=itemTimes(it);
               return h('div',{key:it.id,className:'li'},
                 h(Chip,{cat:it.cat,cats}),
-                h('div',{style:{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},it.name),
+                h('div',{style:{flex:1,minWidth:0},translate:'no'},
+                  h('div',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},it.name),
+                  tms.length>0&&h('div',{style:{fontSize:9,color:'var(--text-3)'}},
+                    tms.length<=3
+                      ? tms.map(timeOf).join(' · ')
+                      : timeOf(tms[0])+' … '+timeOf(tms[tms.length-1])+' ('+tms.length+'×)')
+                ),
                 h('span',{style:{fontWeight:700,minWidth:30,textAlign:'right'}},'×'+it.qty)
               );
             })
@@ -2828,7 +2836,7 @@ function BillModal(props){
         ),
         // Deliberate "paper card" in both themes: horizontal padding + border so the
         // white receipt no longer sits flush/cropped against a dark modal background.
-        h('div',{ref:billRef,className:'receipt',style:{background:'#fff',padding:'12px 14px',borderRadius:10,border:'1px solid var(--border)'}},
+        h('div',{ref:billRef,className:'receipt',translate:'no',style:{background:'#fff',padding:'12px 14px',borderRadius:10,border:'1px solid var(--border)'}},
         h('div',{style:{textAlign:'center',marginBottom:12}},h('div',{style:{fontSize:18,fontWeight:700,letterSpacing:3}},'GAVTHAN'),h('div',{style:{fontSize:11,color:'var(--text-2)'}},'Receipt / Bill')),
         h('div',{style:{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:2}},h('b',null,cust.name),h('span',null,dateOf(billDateTime(cust)||cust.date))),
         h('div',{style:{fontSize:12,marginBottom:2}},'Room/Table: ',h('b',null,cust.room)),
