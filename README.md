@@ -56,6 +56,15 @@ SQL Editor. It:
 > Do **not** disable RLS. The in-app Setup screen intentionally no longer ships
 > `disable row level security` statements.
 
+**Failed-login rate limit (recommended):** also run
+[`SECURITY-LOGIN-RATELIMIT.sql`](./SECURITY-LOGIN-RATELIMIT.sql). It adds an
+`mh_login_attempts` table + `SECURITY DEFINER` RPCs so **3 failed sign-ins per
+email lock that email for 1 hour**, enforced server-side (can't be bypassed by
+clearing browser storage or switching devices). The login screen also keeps a
+device-level localStorage lock as instant feedback, and degrades gracefully to
+that if the RPCs aren't installed. For IP-based protection too, enable Supabase
+Auth rate limits in the dashboard (Authentication → Rate Limits).
+
 **Bootstrap admin:** because the client can no longer self-provision `mh_users`
 rows under RLS, seed the first admin once via SQL:
 
@@ -135,6 +144,7 @@ npm run android:run     # build, sync, run on device/emulator
 ```
 index.html               # Vite root: favicon, Google Identity script, #root
 SECURITY-MIGRATION.sql    # REQUIRED — RLS, policies, next_bill_no(), guards
+SECURITY-LOGIN-RATELIMIT.sql # Recommended — server-side failed-login lockout
 DESIGN_CHANGES.md         # UI-revamp reference (tokens, components, spatial layer)
 public/favicon.svg        # app tab icon
 src/

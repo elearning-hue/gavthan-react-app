@@ -257,6 +257,75 @@ function ThemeToggle(){
     'aria-label':'Toggle theme',onClick:flip},t==='dark'?'☀':'☾');
 }
 
+// ── Google Translate → Marathi ─────────────────────
+// Lazily loads Google's website-translate widget (hidden) on first tap, then
+// drives its hidden <select> to switch the page en↔mr in place — no visible
+// "Select Language" gadget, just the icon in the header.
+var _gtReady=null;
+function gtClearCookie(){
+  try{['',';domain='+location.hostname,';domain=.'+location.hostname].forEach(function(d){
+    document.cookie='googtrans=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT'+d;});}catch(e){}
+}
+function ensureGoogleTranslate(){
+  if(_gtReady)return _gtReady;
+  // Guard React against the classic removeChild/insertBefore DOMException that
+  // Google Translate causes by rewriting text nodes React still owns.
+  try{
+    if(!window.__gtNodePatch&&typeof Node==='function'&&Node.prototype){
+      window.__gtNodePatch=true;
+      var rm=Node.prototype.removeChild;
+      Node.prototype.removeChild=function(c){if(c&&c.parentNode!==this){return c;}return rm.apply(this,arguments);};
+      var ib=Node.prototype.insertBefore;
+      Node.prototype.insertBefore=function(n,r){if(r&&r.parentNode!==this){return n;}return ib.apply(this,arguments);};
+    }
+  }catch(e){}
+  _gtReady=new Promise(function(resolve){
+    var cont=document.getElementById('google_translate_element');
+    if(!cont){cont=document.createElement('div');cont.id='google_translate_element';document.body.appendChild(cont);}
+    window.googleTranslateElementInit=function(){
+      try{new window.google.translate.TranslateElement({pageLanguage:'en',includedLanguages:'en,mr',autoDisplay:false},'google_translate_element');}catch(e){}
+    };
+    var s=document.createElement('script');
+    s.src='https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
+    s.onerror=function(){resolve(false);};
+    document.body.appendChild(s);
+    var tries=0;
+    var iv=setInterval(function(){
+      if(document.querySelector('.goog-te-combo')){clearInterval(iv);setTimeout(function(){resolve(true);},200);} // let GT bind its change handler
+      else if(++tries>60){clearInterval(iv);resolve(false);} // ~12s timeout
+    },200);
+  });
+  return _gtReady;
+}
+function gtSetLang(lang){
+  var combo=document.querySelector('.goog-te-combo');
+  if(!combo)return false;
+  combo.value=lang;
+  combo.dispatchEvent(new Event('change'));
+  return true;
+}
+function TranslateToggle(){
+  // Initial state follows a persisted googtrans cookie (Marathi survives reloads).
+  var _on=useState(function(){try{return /googtrans=[^;]*\/mr/.test(document.cookie);}catch(e){return false;}});var on=_on[0];var setOn=_on[1];
+  // Preload the hidden widget on mount so the FIRST tap is instant (no load delay).
+  // Safe now that displayed data is tagged translate="no" — a preloaded/idle widget
+  // won't rewrite names, menu items, or amounts.
+  useEffect(function(){ensureGoogleTranslate();},[]);
+  function toggle(){
+    if(on){gtSetLang('en');gtClearCookie();setOn(false);return;} // restore original English
+    // Preloaded → apply on this single click. If the script is still loading (slow
+    // network), apply the moment it's ready — still one tap.
+    if(gtSetLang('mr')){setOn(true);return;}
+    ensureGoogleTranslate().then(function(ok){if(ok&&gtSetLang('mr')){setOn(true);}else if(!ok){alert('Could not load Google Translate. Check your internet connection.');}});
+  }
+  return h('button',{className:'theme-toggle tr'+(on?' on':''),translate:'no',
+    title:on?'Show original (English)':'Translate to Marathi (Google)','aria-label':'Translate page to Marathi',
+    onClick:toggle},
+    h('svg',{width:16,height:16,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round','aria-hidden':'true'},
+      h('path',{key:1,d:'m5 8 6 6'}),h('path',{key:2,d:'m4 14 6-6 2-3'}),h('path',{key:3,d:'M2 5h12'}),
+      h('path',{key:4,d:'M7 2h1'}),h('path',{key:5,d:'m22 22-5-10-5 10'}),h('path',{key:6,d:'M14 18h6'})));
+}
+
 // ── HELPERS ────────────────────────────────────────
 function tot(items){return items.reduce(function(s,i){return s+i.price*i.qty;},0);}
 // Raw items total
@@ -442,52 +511,112 @@ function SetupScreen(){
 }
 
 // ── LOGIN SCREEN ───────────────────────────────────
-function LoginScreen(props){
-  var onLogin=props.onLogin;
-  var _mode=useState('login');var mode=_mode[0];var setMode=_mode[1];
+function LoginScreen(){
+  var LOCK_MAX=3, LOCK_MS=60*60*1000; // 3 failed attempts → lock THAT account (per user) for 1 hour
+  // localStorage helpers (fail-safe: private-mode / disabled storage must not crash login)
+  function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+  function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+  function lsDel(k){try{localStorage.removeItem(k);}catch(e){}}
+  // Lockout is keyed by email → per-user, not per-device: locking one account never
+  // blocks a different staff member from signing in on the same shared machine.
+  function normE(e){return (e||'').trim().toLowerCase();}
+  function kFails(e){return 'gv_lf:'+e;}
+  function kLock(e){return 'gv_ll:'+e;}
+  function readLock(e){return e?(Number(lsGet(kLock(e)))||0):0;}
+
   var _email=useState('');var email=_email[0];var setEmail=_email[1];
   var _pass=useState('');var pass=_pass[0];var setPass=_pass[1];
-  var _name=useState('');var name=_name[0];var setName=_name[1];
   var _err=useState('');var err=_err[0];var setErr=_err[1];
   var _busy=useState(false);var busy=_busy[0];var setBusy=_busy[1];
   var _confirmMsg=useState('');var confirmMsg=_confirmMsg[0];var setConfirmMsg=_confirmMsg[1];
+  var _showPw=useState(false);var showPw=_showPw[0];var setShowPw=_showPw[1];
+  var _lockUntil=useState(0);var lockUntil=_lockUntil[0];var setLockUntil=_lockUntil[1];
+  var _lockEmail=useState('');var lockEmail=_lockEmail[0];var setLockEmail=_lockEmail[1];
+  var _tick=useState(0);var setTick=_tick[1];
+
+  var locked=lockUntil>Date.now();
+  var remain=Math.max(0,lockUntil-Date.now());
+
+  function lockNow(e,until){setLockEmail(e);setLockUntil(until);}
+  // Tick while locked; on expiry clear THAT account's counters and return to the form.
+  useEffect(function(){
+    if(!(lockUntil>Date.now()))return;
+    var id=setInterval(function(){
+      if(Date.now()>=lockUntil){clearFails(lockEmail);setLockUntil(0);setLockEmail('');setErr('');}
+      else setTick(function(x){return x+1;});
+    },1000);
+    return function(){clearInterval(id);};
+  },[lockUntil,lockEmail]);
+
+  function recordFail(e){
+    var n=(Number(lsGet(kFails(e)))||0)+1;
+    lsSet(kFails(e),String(n));
+    var until=0;
+    if(n>=LOCK_MAX){until=Date.now()+LOCK_MS;lsSet(kLock(e),String(until));}
+    return {n:n,until:until};
+  }
+  function clearFails(e){lsDel(kFails(e));lsDel(kLock(e));}
+  function fmtRemain(ms){var s=Math.ceil(ms/1000);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
+
+  function finishAuth(u){
+    // Post-credential profile checks (RLS-provisioned accounts only).
+    return supa.from('mh_users').select('*').eq('id',u.id).maybeSingle()
+      .then(function(rr){
+        if(rr.error) throw new Error(rr.error.message);
+        if(!rr.data){
+          supa.auth.signOut();
+          setErr(isAdminEmail(u.email)
+            ?'Admin account not initialized. Seed your mh_users row via SQL (see README) then log in.'
+            :'Account not set up yet. Ask your admin to add you from the Config → Users tab.');
+          setBusy(false);
+          return;
+        }
+        if(rr.data.active===false){
+          supa.auth.signOut();
+          setErr(rr.data.role==='deleted'
+            ?'Your account has been removed. Contact admin.'
+            :'Account awaiting admin approval. Please try again later.');
+          setBusy(false);
+        }
+      });
+  }
 
   function doAuth(){
+    var em=normE(email);
     if(!email.trim()||!pass){setErr('Email and password required.');return;}
+    if(readLock(em)>Date.now()){lockNow(em,readLock(em));return;} // this account is locked
     setBusy(true);setErr('');setConfirmMsg('');
-    supa.auth.signInWithPassword({email:email.trim(),password:pass})
-      .then(function(r){
-        if(r.error){
-          if(r.error.message.toLowerCase().indexOf('email')!==-1&&r.error.message.toLowerCase().indexOf('confirm')!==-1){
-            setErr('Please confirm your email first. Check your inbox for the confirmation link.');
-          } else {
-            setErr(r.error.message);
+    // Authoritative, cross-device check first — also per-email. Degrades to the local
+    // per-account lock if the rate-limit RPCs aren't installed (SECURITY-LOGIN-RATELIMIT.sql)
+    // or are unreachable — the login still works, just without the server backstop.
+    supa.rpc('login_attempt_status',{p_email:em})
+      .then(function(st){return (st&&!st.error&&st.data&&st.data.locked)?st.data:null;},function(){return null;})
+      .then(function(serverLock){
+        if(serverLock){var su=new Date(serverLock.locked_until).getTime();lsSet(kLock(em),String(su));lockNow(em,su);setBusy(false);return;}
+        return supa.auth.signInWithPassword({email:email.trim(),password:pass}).then(function(r){
+          if(r.error){
+            var m=r.error.message.toLowerCase();
+            if(m.indexOf('email')!==-1&&m.indexOf('confirm')!==-1){
+              // Unconfirmed email is a real account, not a brute-force guess — don't count it.
+              setErr('Please confirm your email first. Check your inbox for the confirmation link.');
+              setBusy(false);return;
+            }
+            var lf=recordFail(em); // per-account local counter
+            return supa.rpc('record_login_fail',{p_email:em})
+              .then(function(sr){return (sr&&!sr.error)?sr.data:null;},function(){return null;})
+              .then(function(d){
+                var serverUntil=(d&&d.locked&&d.locked_until)?new Date(d.locked_until).getTime():0;
+                var until=Math.max(lf.until,serverUntil);
+                if(until>Date.now()){if(serverUntil>Date.now())lsSet(kLock(em),String(until));lockNow(em,until);}
+                else{var left=d?d.attempts_left:Math.max(0,LOCK_MAX-lf.n);setErr('Incorrect email or password. '+left+' attempt'+(left!==1?'s':'')+' left before a 1-hour lock.');}
+                setBusy(false);
+              });
           }
-          setBusy(false);return;
-        }
-        var u=r.data.user;
-        return supa.from('mh_users').select('*').eq('id',u.id).maybeSingle()
-          .then(function(rr){
-            if(rr.error) throw new Error(rr.error.message);
-            if(!rr.data){
-              // No app profile. Under RLS, only the service-role user-admin Edge
-              // Function may create mh_users rows, so a missing profile means this
-              // account was never provisioned (staff are added from Config → Users).
-              supa.auth.signOut();
-              setErr(isAdminEmail(u.email)
-                ?'Admin account not initialized. Seed your mh_users row via SQL (see README) then log in.'
-                :'Account not set up yet. Ask your admin to add you from the Config → Users tab.');
-              setBusy(false);
-              return;
-            }
-            if(rr.data.active===false){
-              supa.auth.signOut();
-              setErr(rr.data.role==='deleted'
-                ?'Your account has been removed. Contact admin.'
-                :'Account awaiting admin approval. Please try again later.');
-              setBusy(false);
-            }
-          });
+          // Correct credentials → clear this account's counters, then run profile checks.
+          clearFails(em);
+          supa.rpc('clear_login_fails',{p_email:em}).then(function(){},function(){});
+          return finishAuth(r.data.user);
+        });
       })
       .catch(function(e){setErr(e.message);setBusy(false);});
   }
@@ -499,36 +628,52 @@ function LoginScreen(props){
     supa.auth.resetPasswordForEmail(em).then(function(r){
       setBusy(false);
       if(r&&r.error){setErr('Error: '+r.error.message);return;}
-      setConfirmMsg('✓ Password reset email sent to '+em+'. Check your inbox for the reset link.');
+      setConfirmMsg('Password reset email sent to '+em+'. Check your inbox for the reset link.');
     }).catch(function(e){setBusy(false);setErr(e.message);});
   }
   function onKey(e){if(e.key==='Enter')doAuth();}
 
+  // Inline (SVG) icons — no emoji, stroke-consistent, currentColor for theming.
+  function icon(kids,extra){return h('svg',Object.assign({width:20,height:20,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round','aria-hidden':'true'},extra||{}),kids);}
+  function eyeSvg(){return icon([h('path',{key:1,d:'M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z'}),h('circle',{key:2,cx:12,cy:12,r:3})]);}
+  function eyeOffSvg(){return icon([h('path',{key:1,d:'M9.88 9.88a3 3 0 1 0 4.24 4.24'}),h('path',{key:2,d:'M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.2 13.2 0 0 1-1.67 2.68'}),h('path',{key:3,d:'M6.61 6.61A13.5 13.5 0 0 0 2 12s3 7 10 7a9.7 9.7 0 0 0 5.39-1.61'}),h('line',{key:4,x1:2,x2:22,y1:2,y2:22})]);}
+  function lockSvg(){return icon([h('rect',{key:1,width:18,height:11,x:3,y:11,rx:2}),h('path',{key:2,d:'M7 11V7a5 5 0 0 1 10 0v4'})],{width:24,height:24});}
+
   return h('div',{className:'login-wrap'},
     h('div',{className:'login-box'},
       h('div',{className:'login-logo'},h('em',null,'Gavthan')),
-      h('div',{className:'login-sub'},'Staff Login'),
-      confirmMsg
-        ? h('div',null,
-            h('div',{className:'msg-ok',style:{lineHeight:1.7}},confirmMsg),
-            h('button',{className:'btn btn-a',style:{width:'100%',justifyContent:'center',marginTop:8},
-              onClick:function(){setConfirmMsg('');}},'Back to Login')
+      h('div',{className:'login-sub'}, locked?'Account temporarily locked':'Restaurant billing · staff sign in'),
+      locked
+        ? h('div',{className:'lock-card',role:'alert'},
+            h('div',{className:'lock-ic'},lockSvg()),
+            h('div',{className:'lock-title'},'Too many attempts'),
+            h('div',{className:'lock-msg'},'This account is locked after '+LOCK_MAX+' failed attempts. Another staff member can still sign in on this device.'),
+            h('div',{className:'lock-timer'},fmtRemain(remain)),
+            h('div',{className:'lock-timer-lbl'},'until this account can try again'),
+            h('button',{className:'btn',style:{width:'100%',justifyContent:'center',marginTop:16},onClick:function(){setLockUntil(0);setLockEmail('');setEmail('');setPass('');setErr('');}},'Use a different account')
           )
-        : h('div',null,
-            err&&h('div',{className:'msg-err'},err),
-            h('div',{className:'fld'},h('label',null,'Email'),
-              h('input',{type:'email',value:email,onChange:function(e){setEmail(e.target.value);},placeholder:'you@example.com',onKeyDown:onKey})),
-            h('div',{className:'fld',style:{marginBottom:16}},h('label',null,'Password'),
-              h('input',{type:'password',value:pass,onChange:function(e){setPass(e.target.value);},placeholder:'Your password',onKeyDown:onKey})),
-            h('button',{className:'btn btn-a',style:{width:'100%',justifyContent:'center',marginBottom:8},onClick:doAuth,disabled:busy},
-              busy&&h('span',{className:'spin'}),'Login'),
-            h('div',{style:{textAlign:'center',fontSize:11,marginBottom:6}},
-              h('span',{style:{color:'#B45309',cursor:'pointer',fontWeight:600},onClick:doForgot},'Forgot password?')
-            ),
-            h('div',{style:{textAlign:'center',fontSize:11,color:'var(--text-2)'}},
-              'No account? Ask your admin to create one for you.'
+        : confirmMsg
+          ? h('div',null,
+              h('div',{className:'msg-ok',style:{lineHeight:1.7}},confirmMsg),
+              h('button',{className:'btn btn-a',style:{width:'100%',justifyContent:'center',marginTop:8},onClick:function(){setConfirmMsg('');}},'Back to sign in')
             )
-          )
+          : h('div',null,
+              err&&h('div',{className:'msg-err',role:'alert'},err),
+              h('div',{className:'fld'},h('label',{htmlFor:'lg-email'},'Email'),
+                h('input',{id:'lg-email',type:'email',autoComplete:'username',inputMode:'email',value:email,onChange:function(e){setEmail(e.target.value);},placeholder:'you@example.com',onKeyDown:onKey})),
+              h('div',{className:'fld',style:{marginBottom:18}},h('label',{htmlFor:'lg-pass'},'Password'),
+                h('div',{className:'pw-wrap'},
+                  h('input',{id:'lg-pass',type:showPw?'text':'password',autoComplete:'current-password',value:pass,onChange:function(e){setPass(e.target.value);},placeholder:'Your password',onKeyDown:onKey}),
+                  h('button',{type:'button',className:'pw-toggle','aria-label':showPw?'Hide password':'Show password',onClick:function(){setShowPw(!showPw);}},showPw?eyeOffSvg():eyeSvg())
+                )
+              ),
+              h('button',{className:'btn btn-a',style:{width:'100%',justifyContent:'center',marginBottom:10},onClick:doAuth,disabled:busy},
+                busy&&h('span',{className:'spin'}),'Sign in'),
+              h('div',{style:{textAlign:'center',fontSize:11.5,marginBottom:8}},
+                h('span',{className:'login-link',onClick:doForgot},'Forgot password?')
+              ),
+              h('div',{className:'login-foot'},'No account? Ask your admin to add you.')
+            )
     )
   );
 }
@@ -1107,7 +1252,7 @@ function App(props){
   return h('div',{className:'wrap'},
     !online&&h('div',{style:{background:'#991B1B',color:'#fff',padding:'6px 12px',fontSize:12,fontWeight:600,textAlign:'center'}},
       '⚠ You are offline — changes will not be saved until the connection returns.'),
-    idleWarn&&online&&h('div',{style:{background:'#B45309',color:'#fff',padding:'6px 12px',fontSize:12,fontWeight:600,textAlign:'center'}},
+    idleWarn&&online&&h('div',{style:{background:'var(--primary)',color:'#fff',padding:'6px 12px',fontSize:12,fontWeight:600,textAlign:'center'}},
       '⏱ You will be logged out in 1 minute due to inactivity. Move the mouse or tap to stay signed in.'),
     h('div',{className:'hdr'},
       h('div',{className:'logo'},h('em',null,'Gavthan')),
@@ -1119,8 +1264,9 @@ function App(props){
           style:{width:8,height:8,borderRadius:'50%',flexShrink:0,
             background:dbOk===null?'#d1d5db':dbOk?'#22c55e':'#ef4444',
             boxShadow:dbOk?'0 0 4px #22c55e':'none'}}),
-        h('span',{style:{fontSize:12,color:'var(--text-2)',whiteSpace:'nowrap'}},'Hi ',h('strong',null,displayName)),
+        h('span',{style:{fontSize:12,color:'var(--text-2)',whiteSpace:'nowrap'}},'Hi ',h('strong',{translate:'no'},displayName)),
         h('span',{className:admin?'badge-admin':'badge-user'},admin?'Admin':'Staff'),
+        h(TranslateToggle,null),
         h(ThemeToggle,null),
         h('button',{className:'btn xs btn-r',onClick:logout},'⏻ Sign Out')
       )
@@ -1158,9 +1304,9 @@ function OrdersTab(props){
     list.length===0&&h('div',{className:'empty card'},'No active customers. Tap + to add.'),
     list.map(function(c){
       return h('div',{key:c.id,className:'ccard'+(c.id===selId?' sel':''),onClick:function(){setSelId(c.id===selId?null:c.id);}},
-        h('div',{className:'row bw'},
+        h('div',{className:'row bw',translate:'no'},
           h('div',null,h('div',{style:{fontWeight:700}},c.name),h('div',{className:'muted',style:{fontSize:11}},c.room+(c.phone?' · '+c.phone:''))),
-          h('div',{style:{textAlign:'right'}},h('div',{style:{fontWeight:700,color:'#B45309'}},'₹'+finalTotal(c)),h('div',{className:'muted',style:{fontSize:10}},fmtDT(c.date)))
+          h('div',{style:{textAlign:'right'}},h('div',{style:{fontWeight:700,color:'var(--primary)'}},'₹'+finalTotal(c)),h('div',{className:'muted',style:{fontSize:10}},fmtDT(c.date)))
         ),
         // key=c.id → switching orders remounts the panel, resetting its local
         // discount/adjustment/reason inputs instead of carrying over stale values.
@@ -1180,6 +1326,7 @@ function OrderPanel(props){
   var _disc=useState(String(cust.discount_pct||''));var disc=_disc[0];var setDisc=_disc[1];
   var _adj=useState(String(cust.adjustment||''));var adj=_adj[0];var setAdj=_adj[1];
   var _reason=useState(cust.reason||'');var reason=_reason[0];var setReason=_reason[1];
+  var _kot=useState(false);var kotOpen=_kot[0];var setKotOpen=_kot[1];
   // Reason is needed (enabled + mandatory) whenever a discount % or a non-zero adjustment is entered.
   // Derived from live input state so it toggles instantly as the user types.
   var reasonNeeded=(Number(disc)||0)>0||(Number(adj)||0)!==0;
@@ -1212,7 +1359,7 @@ function OrderPanel(props){
   }
   return h('div',{onClick:function(e){e.stopPropagation();}},
     h('div',{className:'hr'}),
-    h('div',{style:{fontSize:11,color:'#B45309',fontWeight:700,letterSpacing:0.5,marginBottom:4}},'➕ ADD ITEMS'),
+    h('div',{style:{fontSize:11,color:'var(--primary)',fontWeight:700,letterSpacing:0.5,marginBottom:4}},'➕ ADD ITEMS'),
     h('input',{placeholder:'Search menu…',value:q,onChange:function(e){setQ(e.target.value);},style:{marginBottom:6}}),
     h('div',{className:'cats'},cats.map(function(c){return h('button',{key:c,className:cat===c?'on':'',title:c,onClick:function(){setCat(c);},style:{fontSize:18,padding:'4px 10px',lineHeight:1}},catIcon(c));})),
     h('div',{className:'sb'},filtered.length===0?h('div',{style:{fontSize:12,color:'var(--text-2)',padding:8}},'No items.'):
@@ -1220,7 +1367,7 @@ function OrderPanel(props){
         var inO=cust.items.find(function(i){return i.id===mi.id;});
         return h('div',{key:mi.id,className:'mi-pick'+(inO?' in':''),onClick:function(){upsertItem(cust.id,mi.id,1);}},
           h(Chip,{cat:mi.cat,cats}),
-          h('span',{className:'mi-name'},mi.name),
+          h('span',{className:'mi-name',translate:'no'},mi.name),
           h('span',{className:'mi-price'},'₹'+mi.price),
           inO&&h('button',{className:'qb',onClick:function(e){e.stopPropagation();upsertItem(cust.id,mi.id,-1);}},'−'),
           inO&&h('span',{className:'mi-qty'},inO.qty),
@@ -1229,14 +1376,14 @@ function OrderPanel(props){
       })
     ),
     // ── Visible section divider between menu picker and current bill ──
-    cust.items.length>0&&h('div',{style:{borderTop:'2px dashed #B45309',marginTop:10,marginBottom:6,paddingTop:8}}),
+    cust.items.length>0&&h('div',{style:{borderTop:'2px dashed var(--primary)',marginTop:10,marginBottom:6,paddingTop:8}}),
     cust.items.length>0&&h('div',{className:'cur-order'},
       h('div',{style:{fontSize:11,color:'var(--green)',fontWeight:700,letterSpacing:0.5,marginBottom:6}},'🧾 CURRENT ORDER'),
       h('div',{className:'sb'},cust.items.map(function(it){
         var tms=itemTimes(it);
         return h('div',{key:it.id,className:'li'},
           h(Chip,{cat:it.cat,cats}),
-          h('div',{style:{flex:1,minWidth:0}},
+          h('div',{style:{flex:1,minWidth:0},translate:'no'},
             h('div',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},it.name),
             tms.length>0&&h('div',{style:{fontSize:9,color:'var(--text-3)'}},
               tms.length<=3
@@ -1287,7 +1434,7 @@ function OrderPanel(props){
     // Reason field — auto-enabled & mandatory when a discount/adjustment value is entered.
     h('div',{style:{marginBottom:4}},
       h('div',{className:'row bw',style:{marginBottom:3}},
-        h('span',{style:{fontSize:12,fontWeight:600,color:reasonNeeded?'#B45309':'var(--text-3)'}},
+        h('span',{style:{fontSize:12,fontWeight:600,color:reasonNeeded?'var(--primary)':'var(--text-3)'}},
           'Reason'+(reasonNeeded?' *':'')),
         reasonNeeded&&!reason.trim()&&h('span',{style:{fontSize:10,color:'#991B1B',fontWeight:700}},'Required')
       ),
@@ -1301,9 +1448,47 @@ function OrderPanel(props){
     h('div',{className:'hr'}),
     h('div',{className:'row',style:{gap:5}},
       h('button',{className:'btn xs',onClick:function(){setBillId(cust.id);}},'🧾 Bill'),
-      h('button',{className:'btn xs',onClick:printKOT},'👨‍🍳 KOT'),
+      h('button',{className:'btn xs',onClick:function(){if(!cust.items.length){alert('No items to send to kitchen.');return;}setKotOpen(true);}},'👨‍🍳 KOT'),
       h('button',{className:'btn btn-g xs',onClick:function(){settle(cust.id);}},'✓ Settle'),
       h('button',{className:'btn btn-r xs',onClick:function(){delCust(cust.id);}},'🗑')
+    ),
+    // KOT confirmation modal (mirrors the Bill button's modal workflow): preview
+    // the kitchen ticket, then Print or Cancel — no direct-to-printer send.
+    kotOpen&&h('div',{className:'ovl',onClick:function(){setKotOpen(false);}},
+      h('div',{className:'modal',style:{maxWidth:380},onClick:function(e){e.stopPropagation();}},
+        h('div',{className:'mhdr'},
+          h('span',{style:{fontWeight:700,fontSize:13}},'👨‍🍳 Kitchen Order (KOT)'),
+          h('button',{className:'btn xs',onClick:function(){setKotOpen(false);}},'✕')
+        ),
+        h('div',{className:'mbody'},
+          // Actual kitchen-ticket preview (item names + every add-time + count) —
+          // the real KOT content, not a copy of the order panel. translate:'no' keeps
+          // it exactly as entered (names + the ticket format) like the printed KOT.
+          h('div',{className:'cur-order',translate:'no',style:{fontSize:13}},
+            h('div',{style:{textAlign:'center',borderBottom:'1px dashed var(--border)',paddingBottom:8,marginBottom:8}},
+              h('div',{style:{fontSize:16,fontWeight:800,letterSpacing:2}},'KITCHEN ORDER'),
+              h('div',{style:{fontSize:11,color:'var(--text-2)'}},HOTEL_NAME+' — KOT')
+            ),
+            h('div',{style:{fontSize:12}},h('strong',null,cust.name||'—'),'   Room/Table: ',h('strong',null,cust.room||'—')),
+            h('div',{style:{fontSize:11,color:'var(--text-2)',borderBottom:'1px dashed var(--border)',paddingBottom:8,marginBottom:6}},dateOf(cust.date)+'   '+timeStr()),
+            cust.items.map(function(it){
+              var tms=itemTimes(it);
+              return h('div',{key:it.id,style:{padding:'6px 0',borderBottom:'1px dotted var(--border)'}},
+                h('div',{style:{display:'flex',justifyContent:'space-between',gap:8,fontWeight:700,fontSize:14}},
+                  h('span',null,it.name),
+                  h('span',{style:{flexShrink:0}},'×'+(Number(it.qty)||0))
+                ),
+                tms.length>0&&h('div',{style:{fontSize:9,color:'var(--text-3)',marginTop:2,lineHeight:1.5}},tms.map(timeOf).join(' · '))
+              );
+            }),
+            h('div',{style:{textAlign:'center',fontSize:10,color:'var(--text-2)',marginTop:10}},'--- Prepare above items ---')
+          ),
+          h('div',{className:'row',style:{gap:6,marginTop:12}},
+            h('button',{className:'btn',style:{flex:1,justifyContent:'center'},onClick:function(){setKotOpen(false);}},'Cancel'),
+            h('button',{className:'btn btn-a',style:{flex:1,justifyContent:'center'},onClick:function(){setKotOpen(false);printKOT();}},'🖨 Print')
+          )
+        )
+      )
     )
   );
 }
@@ -1441,7 +1626,7 @@ function NewTab(props){
                   else if(v<minYMD){setMsg('Backdated bills are limited to the past 15 days.');v=minYMD;setTimeout(function(){setMsg('');},3000);}
                   setBillDate(v);
                 }}),
-              billDate!==todayYMD&&h('div',{style:{fontSize:10,color:'#B45309',marginTop:2,fontWeight:600}},'⚠ Backdated bill — '+billDate)
+              billDate!==todayYMD&&h('div',{style:{fontSize:10,color:'var(--primary)',marginTop:2,fontWeight:600}},'⚠ Backdated bill — '+billDate)
             )
           : h('div',null,
               h('input',{type:'date',value:todayYMD,disabled:true,style:{background:'var(--surface-2)'}}),
@@ -1495,12 +1680,12 @@ function HistoryTab(props){
           return h('div',{key:c.id,className:'li',style:{flexDirection:'column',alignItems:'stretch',gap:3,paddingBottom:6}},
             h('div',{className:'row bw'},
               h('span',{style:{fontWeight:700}},c.name+' · '+c.room),
-              h('div',{className:'row',style:{gap:4}},h('span',{style:{fontWeight:700,color:'#B45309'}},'₹'+t),
+              h('div',{className:'row',style:{gap:4}},h('span',{style:{fontWeight:700,color:'var(--primary)'}},'₹'+t),
                 h('button',{className:'btn xs',onClick:function(){setBillId(c.id);}},'🧾 Bill'))
             ),
-            h('div',{className:'row',style:{gap:5}},h('span',{className:'muted',style:{fontSize:10}},fmtDT(billDateTime(c))),h('span',{className:'tag-s'},'Settled'),c.bill_no&&h('span',{style:{fontSize:10,fontWeight:700,color:'#B45309'}},fmtBill(c.bill_no))),
+            h('div',{className:'row',style:{gap:5}},h('span',{className:'muted',style:{fontSize:10}},fmtDT(billDateTime(c))),h('span',{className:'tag-s'},'Settled'),c.bill_no&&h('span',{style:{fontSize:10,fontWeight:700,color:'var(--primary)'}},fmtBill(c.bill_no))),
             h('div',{style:{fontSize:11,color:'var(--text-2)'}},c.items.slice(0,3).map(function(i){return i.name+'×'+i.qty;}).join(', ')+(c.items.length>3?', …':'')),
-            (c.discount_on||c.adjustment_on)&&c.reason&&h('div',{style:{fontSize:11,color:'#B45309',fontStyle:'italic'}},'Reason: '+c.reason)
+            (c.discount_on||c.adjustment_on)&&c.reason&&h('div',{style:{fontSize:11,color:'var(--primary)',fontStyle:'italic'}},'Reason: '+c.reason)
           );
         })
       )
@@ -1640,13 +1825,13 @@ function HistoryTab(props){
                 var nm=su?(su.display_name||k.split('@')[0]):k;
                 return h('div',{key:k,className:'row bw',style:{fontSize:12,padding:'4px 0',borderBottom:'1px dotted var(--border)'}},
                   h('span',null,nm+' — '+byStaff[k].count+' bill'+(byStaff[k].count!==1?'s':'')),
-                  h('span',{style:{fontWeight:700,color:'#B45309'}},'₹'+byStaff[k].rev)
+                  h('span',{style:{fontWeight:700,color:'var(--primary)'}},'₹'+byStaff[k].rev)
                 );
               });
             })(),
             h('div',{className:'row bw',style:{fontSize:14,fontWeight:700,paddingTop:6,marginTop:2,borderTop:'2px solid #333'}},
               h('span',null,'TOTAL — '+todaySett.length+' bill'+(todaySett.length!==1?'s':'')),
-              h('span',{style:{color:'#B45309'}},'₹'+todayRev)
+              h('span',{style:{color:'var(--primary)'}},'₹'+todayRev)
             )
           )
     ),
@@ -1685,7 +1870,7 @@ function HistoryTab(props){
       ),
       h('div',{className:'row bw',style:{fontSize:11,color:'var(--text-2)',margin:'6px 0 8px'}},
         h('span',null,shown.length+' record'+(shown.length!==1?'s':'')+(hasFilter?' (filtered)':'')+(shown.length>PAGE_SIZE?' — page '+(safePage+1)+'/'+totalPages:'')),
-        shown.length>0&&h('span',{style:{fontWeight:700,color:'#B45309'}},'Total: ₹'+shownRev)
+        shown.length>0&&h('span',{style:{fontWeight:700,color:'var(--primary)'}},'Total: ₹'+shownRev)
       ),
       shown.length===0?h('div',{className:'empty'},'No records found.'):
       pageItems.map(function(c){
@@ -1696,18 +1881,18 @@ function HistoryTab(props){
           h('div',{className:'row bw'},
             h('span',{style:{fontWeight:700}},c.name+' · '+c.room),
             h('div',{className:'row',style:{gap:4}},
-              h('span',{style:{fontWeight:700,color:'#B45309'}},'₹'+t),
+              h('span',{style:{fontWeight:700,color:'var(--primary)'}},'₹'+t),
               h('button',{className:'btn xs',onClick:function(){setBillId(c.id);}},'🧾 Bill'),
               h('button',{className:'btn btn-r xs',onClick:function(){delCust(c.id);}},'🗑')
             )
           ),
           h('div',{className:'row',style:{gap:5,flexWrap:'wrap'}},
-            c.settled_at&&h('span',{className:'muted',style:{fontSize:10}},fmtDT(billDateTime(c))),c.bill_no&&h('span',{style:{fontSize:10,fontWeight:700,color:'#B45309'}},fmtBill(c.bill_no)),
+            c.settled_at&&h('span',{className:'muted',style:{fontSize:10}},fmtDT(billDateTime(c))),c.bill_no&&h('span',{style:{fontSize:10,fontWeight:700,color:'var(--primary)'}},fmtBill(c.bill_no)),
             h('span',{className:'tag-s'},'Settled'),
             sn&&h('span',{style:{fontSize:10,color:'var(--text-2)'}},'by '+sn)
           ),
           h('div',{style:{fontSize:11,color:'var(--text-2)'}},c.items.slice(0,3).map(function(i){return i.name+'×'+i.qty;}).join(', ')+(c.items.length>3?', …':'')),
-          (c.discount_on||c.adjustment_on)&&c.reason&&h('div',{style:{fontSize:11,color:'#B45309',fontStyle:'italic'}},'Reason: '+c.reason)
+          (c.discount_on||c.adjustment_on)&&c.reason&&h('div',{style:{fontSize:11,color:'var(--primary)',fontStyle:'italic'}},'Reason: '+c.reason)
         );
       }),
       // Pagination controls
@@ -1852,7 +2037,7 @@ function MenuTab(props){
           return h('div',{key:it.id,'data-itemid':it.id,className:'li',style:{opacity:avail?1:0.55}},
             h('span',{className:'dh',title:'Drag to reorder',style:{cursor:'grab',touchAction:'none',userSelect:'none',color:'var(--text-3)',padding:'0 4px',fontSize:14,fontWeight:700,flexShrink:0}},'⋮⋮'),
             h('span',{style:{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},it.name,!avail&&h('span',{style:{fontSize:10,color:'#991B1B',fontWeight:700,marginLeft:5}},'OUT OF STOCK')),
-            h('span',{style:{fontWeight:700,color:'#B45309',minWidth:40,textAlign:'right'}},'₹'+it.price),
+            h('span',{style:{fontWeight:700,color:'var(--primary)',minWidth:40,textAlign:'right'}},'₹'+it.price),
             h('button',{className:'btn xs '+(avail?'btn-r':'btn-g'),style:{marginLeft:8},onClick:function(){toggleMenuAvail(it.id,!avail);}},avail?'Mark Out':'Mark In'),
             h('button',{className:'btn xs',onClick:function(){setEditId(it.id);setEditN(it.name);setEditP(''+it.price);}},'✏ Edit'),
             h('button',{className:'btn btn-r xs',onClick:function(){deleteMenuItem(it.id);}},'🗑 Del')
@@ -2313,8 +2498,8 @@ function ManagerTab(props){
       h('div',{className:'gauge-wrap'},
         h('svg',{className:'gauge-svg',viewBox:'0 0 100 100'},
           h('defs',null,h('linearGradient',{id:'gaugeGrad',x1:'0',y1:'0',x2:'1',y2:'1'},
-            h('stop',{offset:'0%',stopColor:'#f59e0b'}),
-            h('stop',{offset:'100%',stopColor:'#b45309'}))),
+            h('stop',{offset:'0%',style:{stopColor:'var(--primary)'}}),
+            h('stop',{offset:'100%',style:{stopColor:'var(--primary-700)'}}))),
           h('circle',{className:'gauge-arc-bg',cx:50,cy:50,r:R,strokeWidth:9,strokeDasharray:ARC+' '+C}),
           h('circle',{className:'gauge-arc-fg',cx:50,cy:50,r:R,strokeWidth:9,strokeDasharray:ARC+' '+C,strokeDashoffset:off})
         ),
@@ -2396,7 +2581,7 @@ function ManagerTab(props){
       h('div',{className:'heat'},hours.map(function(v,hr){
         var op=v?(0.18+0.82*(v/maxHour)):0.12;
         return h('div',{key:hr,className:'heat-cell',title:hr+':00 — '+v+' bills',
-          style:{background:'rgba(180,83,9,'+op.toFixed(2)+')'}});
+          style:{background:'rgba(var(--primary-rgb),'+op.toFixed(2)+')'}});
       })),
       h('div',{className:'row bw',style:{marginTop:2}},['12a','6a','12p','6p','11p'].map(function(l,idx){
         return h('div',{key:idx,className:'heat-x',style:{flex:'none'}},l);
@@ -2647,7 +2832,7 @@ function BillModal(props){
         ),
         // Deliberate "paper card" in both themes: horizontal padding + border so the
         // white receipt no longer sits flush/cropped against a dark modal background.
-        h('div',{ref:billRef,className:'receipt',style:{background:'#fff',padding:'12px 14px',borderRadius:10,border:'1px solid var(--border)'}},
+        h('div',{ref:billRef,className:'receipt',translate:'no',style:{background:'#fff',padding:'12px 14px',borderRadius:10,border:'1px solid var(--border)'}},
         h('div',{style:{textAlign:'center',marginBottom:12}},h('div',{style:{fontSize:18,fontWeight:700,letterSpacing:3}},'GAVTHAN'),h('div',{style:{fontSize:11,color:'var(--text-2)'}},'Receipt / Bill')),
         h('div',{style:{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:2}},h('b',null,cust.name),h('span',null,dateOf(billDateTime(cust)||cust.date))),
         h('div',{style:{fontSize:12,marginBottom:2}},'Room/Table: ',h('b',null,cust.room)),
@@ -2670,7 +2855,7 @@ function BillModal(props){
           if((cust.discount_on||cust.adjustment_on)&&cust.reason) rowsB.push(h('div',{key:'r',style:{fontSize:11,color:'var(--text-2)',fontStyle:'italic',marginBottom:2}},'Reason: '+cust.reason));
           return h('div',{style:{marginBottom:6}},rowsB);
         })(),
-        h('div',{style:{display:'flex',justifyContent:'space-between',fontWeight:700,fontSize:16}},h('span',null,'Total'),h('span',{style:{color:'#B45309'}},'₹'+t)),
+        h('div',{style:{display:'flex',justifyContent:'space-between',fontWeight:700,fontSize:16}},h('span',null,'Total'),h('span',{style:{color:'var(--primary)'}},'₹'+t)),
         h('div',{style:{textAlign:'center',fontSize:11,color:'var(--text-2)',marginTop:12}},'Thank you for visiting Gavthan!')
         )
       )
