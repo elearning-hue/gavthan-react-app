@@ -525,11 +525,17 @@ function SetupScreen(){
 
 // ── LOGIN SCREEN ───────────────────────────────────
 function LoginScreen(){
-  var LOCK_MAX=3, LOCK_MS=60*60*1000; // 3 failed attempts → lock this device for 1 hour
+  var LOCK_MAX=3, LOCK_MS=60*60*1000; // 3 failed attempts → lock THAT account (per user) for 1 hour
   // localStorage helpers (fail-safe: private-mode / disabled storage must not crash login)
   function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
   function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
   function lsDel(k){try{localStorage.removeItem(k);}catch(e){}}
+  // Lockout is keyed by email → per-user, not per-device: locking one account never
+  // blocks a different staff member from signing in on the same shared machine.
+  function normE(e){return (e||'').trim().toLowerCase();}
+  function kFails(e){return 'gv_lf:'+e;}
+  function kLock(e){return 'gv_ll:'+e;}
+  function readLock(e){return e?(Number(lsGet(kLock(e)))||0):0;}
 
   var _email=useState('');var email=_email[0];var setEmail=_email[1];
   var _pass=useState('');var pass=_pass[0];var setPass=_pass[1];
@@ -537,32 +543,33 @@ function LoginScreen(){
   var _busy=useState(false);var busy=_busy[0];var setBusy=_busy[1];
   var _confirmMsg=useState('');var confirmMsg=_confirmMsg[0];var setConfirmMsg=_confirmMsg[1];
   var _showPw=useState(false);var showPw=_showPw[0];var setShowPw=_showPw[1];
-  var _lockUntil=useState(function(){return Number(lsGet('gv_login_locked_until'))||0;});var lockUntil=_lockUntil[0];var setLockUntil=_lockUntil[1];
+  var _lockUntil=useState(0);var lockUntil=_lockUntil[0];var setLockUntil=_lockUntil[1];
+  var _lockEmail=useState('');var lockEmail=_lockEmail[0];var setLockEmail=_lockEmail[1];
   var _tick=useState(0);var setTick=_tick[1];
 
   var locked=lockUntil>Date.now();
   var remain=Math.max(0,lockUntil-Date.now());
 
-  // Tick every second while locked so the countdown updates and self-clears on expiry.
+  function lockNow(e,until){setLockEmail(e);setLockUntil(until);}
+  // Tick while locked; on expiry clear THAT account's counters and return to the form.
   useEffect(function(){
     if(!(lockUntil>Date.now()))return;
     var id=setInterval(function(){
-      if(Date.now()>=lockUntil){lsDel('gv_login_locked_until');lsDel('gv_login_fails');setLockUntil(0);setErr('');}
+      if(Date.now()>=lockUntil){clearFails(lockEmail);setLockUntil(0);setLockEmail('');setErr('');}
       else setTick(function(x){return x+1;});
     },1000);
     return function(){clearInterval(id);};
-  },[lockUntil]);
+  },[lockUntil,lockEmail]);
 
-  function recordFail(){
-    var n=(Number(lsGet('gv_login_fails'))||0)+1;
-    lsSet('gv_login_fails',String(n));
-    if(n>=LOCK_MAX){var until=Date.now()+LOCK_MS;lsSet('gv_login_locked_until',String(until));setLockUntil(until);}
-    return n;
+  function recordFail(e){
+    var n=(Number(lsGet(kFails(e)))||0)+1;
+    lsSet(kFails(e),String(n));
+    var until=0;
+    if(n>=LOCK_MAX){until=Date.now()+LOCK_MS;lsSet(kLock(e),String(until));}
+    return {n:n,until:until};
   }
-  function clearFails(){lsDel('gv_login_fails');lsDel('gv_login_locked_until');}
+  function clearFails(e){lsDel(kFails(e));lsDel(kLock(e));}
   function fmtRemain(ms){var s=Math.ceil(ms/1000);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
-
-  function applyServerLock(iso){var until=iso?new Date(iso).getTime():0;if(until>Date.now()){lsSet('gv_login_locked_until',String(until));setLockUntil(until);}}
 
   function finishAuth(u){
     // Post-credential profile checks (RLS-provisioned accounts only).
@@ -588,17 +595,17 @@ function LoginScreen(){
   }
 
   function doAuth(){
-    if(lockUntil>Date.now())return; // locked out (device)
+    var em=normE(email);
     if(!email.trim()||!pass){setErr('Email and password required.');return;}
-    var em=email.trim().toLowerCase();
+    if(readLock(em)>Date.now()){lockNow(em,readLock(em));return;} // this account is locked
     setBusy(true);setErr('');setConfirmMsg('');
-    // Authoritative, cross-device check first. Degrades to local-only lockout if
-    // the rate-limit RPCs aren't installed (SECURITY-LOGIN-RATELIMIT.sql) or are
-    // unreachable — the login still works, just without the server backstop.
+    // Authoritative, cross-device check first — also per-email. Degrades to the local
+    // per-account lock if the rate-limit RPCs aren't installed (SECURITY-LOGIN-RATELIMIT.sql)
+    // or are unreachable — the login still works, just without the server backstop.
     supa.rpc('login_attempt_status',{p_email:em})
       .then(function(st){return (st&&!st.error&&st.data&&st.data.locked)?st.data:null;},function(){return null;})
       .then(function(serverLock){
-        if(serverLock){applyServerLock(serverLock.locked_until);setBusy(false);return;}
+        if(serverLock){var su=new Date(serverLock.locked_until).getTime();lsSet(kLock(em),String(su));lockNow(em,su);setBusy(false);return;}
         return supa.auth.signInWithPassword({email:email.trim(),password:pass}).then(function(r){
           if(r.error){
             var m=r.error.message.toLowerCase();
@@ -607,20 +614,19 @@ function LoginScreen(){
               setErr('Please confirm your email first. Check your inbox for the confirmation link.');
               setBusy(false);return;
             }
-            var localFails=recordFail(); // device counter (sets local lock at the max)
+            var lf=recordFail(em); // per-account local counter
             return supa.rpc('record_login_fail',{p_email:em})
               .then(function(sr){return (sr&&!sr.error)?sr.data:null;},function(){return null;})
               .then(function(d){
-                if(d&&d.locked){applyServerLock(d.locked_until);}
-                else if(localFails<LOCK_MAX){
-                  var left=d?d.attempts_left:Math.max(0,LOCK_MAX-localFails);
-                  setErr('Incorrect email or password. '+left+' attempt'+(left!==1?'s':'')+' left before a 1-hour lock.');
-                }
+                var serverUntil=(d&&d.locked&&d.locked_until)?new Date(d.locked_until).getTime():0;
+                var until=Math.max(lf.until,serverUntil);
+                if(until>Date.now()){if(serverUntil>Date.now())lsSet(kLock(em),String(until));lockNow(em,until);}
+                else{var left=d?d.attempts_left:Math.max(0,LOCK_MAX-lf.n);setErr('Incorrect email or password. '+left+' attempt'+(left!==1?'s':'')+' left before a 1-hour lock.');}
                 setBusy(false);
               });
           }
-          // Correct credentials → clear both counters, then run profile checks.
-          clearFails();
+          // Correct credentials → clear this account's counters, then run profile checks.
+          clearFails(em);
           supa.rpc('clear_login_fails',{p_email:em}).then(function(){},function(){});
           return finishAuth(r.data.user);
         });
@@ -649,14 +655,15 @@ function LoginScreen(){
   return h('div',{className:'login-wrap'},
     h('div',{className:'login-box'},
       h('div',{className:'login-logo'},h('em',null,'Gavthan')),
-      h('div',{className:'login-sub'}, locked?'Sign-in temporarily locked':'Restaurant billing · staff sign in'),
+      h('div',{className:'login-sub'}, locked?'Account temporarily locked':'Restaurant billing · staff sign in'),
       locked
         ? h('div',{className:'lock-card',role:'alert'},
             h('div',{className:'lock-ic'},lockSvg()),
             h('div',{className:'lock-title'},'Too many attempts'),
-            h('div',{className:'lock-msg'},'For your security, sign-in is locked after '+LOCK_MAX+' failed attempts.'),
+            h('div',{className:'lock-msg'},'This account is locked after '+LOCK_MAX+' failed attempts. Another staff member can still sign in on this device.'),
             h('div',{className:'lock-timer'},fmtRemain(remain)),
-            h('div',{className:'lock-timer-lbl'},'until you can try again')
+            h('div',{className:'lock-timer-lbl'},'until this account can try again'),
+            h('button',{className:'btn',style:{width:'100%',justifyContent:'center',marginTop:16},onClick:function(){setLockUntil(0);setLockEmail('');setEmail('');setPass('');setErr('');}},'Use a different account')
           )
         : confirmMsg
           ? h('div',null,
