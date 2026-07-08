@@ -1448,7 +1448,7 @@ function OrderPanel(props){
     h('div',{className:'hr'}),
     h('div',{className:'row',style:{gap:5}},
       h('button',{className:'btn xs',onClick:function(){setBillId(cust.id);}},'🧾 Bill'),
-      h('button',{className:'btn xs',onClick:function(){if(!cust.items.length){alert('No items to send to kitchen.');return;}setKotOpen(true);}},'👨‍🍳 KOT'),
+      h('button',{className:'btn xs',translate:'no',onClick:function(){if(!cust.items.length){alert('No items to send to kitchen.');return;}setKotOpen(true);}},'👨‍🍳 KOT'),
       h('button',{className:'btn btn-g xs',onClick:function(){settle(cust.id);}},'✓ Settle'),
       h('button',{className:'btn btn-r xs',onClick:function(){delCust(cust.id);}},'🗑')
     ),
@@ -2806,7 +2806,6 @@ function BillModal(props){
   return h('div',{className:'ovl',onClick:onClose},
     h('div',{className:'modal',onClick:function(e){e.stopPropagation();}},
       h('div',{className:'mhdr'},h('span',{style:{fontWeight:700,fontSize:13}},'Bill — '+cust.name),h('div',{className:'row',style:{gap:5,flexWrap:'wrap'}},
-        h('button',{className:'btn btn-a xs',onClick:printBill},'🖨 Print'),
         h('button',{className:'btn xs',onClick:saveJPEG},'🖼 JPEG'),
         h('button',{className:'btn xs',style:{background:'#B91C1C',color:'#fff',borderColor:'#B91C1C'},onClick:savePDF},'📄 PDF'),
         h('button',{className:'btn xs',style:{background:'#0F766E',color:'#fff',borderColor:'#0F766E'},onClick:thermalPrint},'🧾 Thermal'),
