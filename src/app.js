@@ -262,9 +262,13 @@ function ThemeToggle(){
 // drives its hidden <select> to switch the page en↔mr in place — no visible
 // "Select Language" gadget, just the icon in the header.
 var _gtReady=null;
-function gtClearCookie(){
+// Drive translation via the googtrans cookie (all domain scopes). lang='' clears it.
+// The toggle sets this + reloads so GT applies it on a clean mount — deterministic,
+// single click, whole page, no half-translated flakiness from in-place gtSetLang.
+function gtSetCookie(lang){
   try{['',';domain='+location.hostname,';domain=.'+location.hostname].forEach(function(d){
-    document.cookie='googtrans=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT'+d;});}catch(e){}
+    document.cookie=lang?('googtrans=/en/'+lang+';path=/'+d):('googtrans=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT'+d);
+  });}catch(e){}
 }
 function ensureGoogleTranslate(){
   if(_gtReady)return _gtReady;
@@ -297,26 +301,17 @@ function ensureGoogleTranslate(){
   });
   return _gtReady;
 }
-function gtSetLang(lang){
-  var combo=document.querySelector('.goog-te-combo');
-  if(!combo)return false;
-  combo.value=lang;
-  combo.dispatchEvent(new Event('change'));
-  return true;
-}
 function TranslateToggle(){
   // Initial state follows a persisted googtrans cookie (Marathi survives reloads).
   var _on=useState(function(){try{return /googtrans=[^;]*\/mr/.test(document.cookie);}catch(e){return false;}});var on=_on[0];var setOn=_on[1];
-  // Preload the hidden widget on mount so the FIRST tap is instant (no load delay).
-  // Safe now that displayed data is tagged translate="no" — a preloaded/idle widget
-  // won't rewrite names, menu items, or amounts.
+  // Apply any persisted googtrans cookie on load (widget reads it and translates).
   useEffect(function(){ensureGoogleTranslate();},[]);
+  // True toggle: flip the cookie and reload. GT applies it cleanly on the fresh
+  // mount, so one click reliably switches the WHOLE page en<->mr — no in-place
+  // gtSetLang that GT ignores on first change or React reverts on re-render.
   function toggle(){
-    if(on){gtSetLang('en');gtClearCookie();setOn(false);return;} // restore original English
-    // Preloaded → apply on this single click. If the script is still loading (slow
-    // network), apply the moment it's ready — still one tap.
-    if(gtSetLang('mr')){setOn(true);return;}
-    ensureGoogleTranslate().then(function(ok){if(ok&&gtSetLang('mr')){setOn(true);}else if(!ok){alert('Could not load Google Translate. Check your internet connection.');}});
+    gtSetCookie(on?'':'mr');
+    location.reload();
   }
   return h('button',{className:'theme-toggle tr'+(on?' on':''),translate:'no',
     title:on?'Show original (English)':'Translate to Marathi (Google)','aria-label':'Translate page to Marathi',
@@ -1448,7 +1443,7 @@ function OrderPanel(props){
     h('div',{className:'hr'}),
     h('div',{className:'row',style:{gap:5}},
       h('button',{className:'btn xs',onClick:function(){setBillId(cust.id);}},'🧾 Bill'),
-      h('button',{className:'btn xs',onClick:function(){if(!cust.items.length){alert('No items to send to kitchen.');return;}setKotOpen(true);}},'👨‍🍳 KOT'),
+      h('button',{className:'btn xs',translate:'no',onClick:function(){if(!cust.items.length){alert('No items to send to kitchen.');return;}setKotOpen(true);}},'👨‍🍳 KOT'),
       h('button',{className:'btn btn-g xs',onClick:function(){settle(cust.id);}},'✓ Settle'),
       h('button',{className:'btn btn-r xs',onClick:function(){delCust(cust.id);}},'🗑')
     ),
@@ -2806,7 +2801,6 @@ function BillModal(props){
   return h('div',{className:'ovl',onClick:onClose},
     h('div',{className:'modal',onClick:function(e){e.stopPropagation();}},
       h('div',{className:'mhdr'},h('span',{style:{fontWeight:700,fontSize:13}},'Bill — '+cust.name),h('div',{className:'row',style:{gap:5,flexWrap:'wrap'}},
-        h('button',{className:'btn btn-a xs',onClick:printBill},'🖨 Print'),
         h('button',{className:'btn xs',onClick:saveJPEG},'🖼 JPEG'),
         h('button',{className:'btn xs',style:{background:'#B91C1C',color:'#fff',borderColor:'#B91C1C'},onClick:savePDF},'📄 PDF'),
         h('button',{className:'btn xs',style:{background:'#0F766E',color:'#fff',borderColor:'#0F766E'},onClick:thermalPrint},'🧾 Thermal'),
@@ -2857,6 +2851,11 @@ function BillModal(props){
         })(),
         h('div',{style:{display:'flex',justifyContent:'space-between',fontWeight:700,fontSize:16}},h('span',null,'Total'),h('span',{style:{color:'var(--primary)'}},'₹'+t)),
         h('div',{style:{textAlign:'center',fontSize:11,color:'var(--text-2)',marginTop:12}},'Thank you for visiting Gavthan!')
+        ),
+        // Bottom actions — same Cancel/Print pattern as the KOT modal.
+        h('div',{className:'row',style:{gap:6,marginTop:12}},
+          h('button',{className:'btn',style:{flex:1,justifyContent:'center'},onClick:onClose},'Cancel'),
+          h('button',{className:'btn btn-a',style:{flex:1,justifyContent:'center'},onClick:printBill},'🖨 Print')
         )
       )
     )
