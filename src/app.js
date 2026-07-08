@@ -2857,6 +2857,11 @@ function BillModal(props){
         })(),
         h('div',{style:{display:'flex',justifyContent:'space-between',fontWeight:700,fontSize:16}},h('span',null,'Total'),h('span',{style:{color:'var(--primary)'}},'₹'+t)),
         h('div',{style:{textAlign:'center',fontSize:11,color:'var(--text-2)',marginTop:12}},'Thank you for visiting Gavthan!')
+        ),
+        // Bottom actions — same Cancel/Print pattern as the KOT modal.
+        h('div',{className:'row',style:{gap:6,marginTop:12}},
+          h('button',{className:'btn',style:{flex:1,justifyContent:'center'},onClick:onClose},'Cancel'),
+          h('button',{className:'btn btn-a',style:{flex:1,justifyContent:'center'},onClick:printBill},'🖨 Print')
         )
       )
     )
