@@ -1,10 +1,38 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Gavthan">
-  <rect width="64" height="64" rx="15" fill="#0b0b0d"/>
-  <g stroke-linecap="round" stroke-linejoin="round" fill="none">
-    <path d="M42 15 C48 21 48 30 42 34 L42 49" stroke="#ffffff" stroke-width="3.6"/>
-    <line x1="20" y1="15" x2="20" y2="27" stroke="#ffffff" stroke-width="3.4"/>
-    <line x1="28" y1="15" x2="28" y2="27" stroke="#ffffff" stroke-width="3.4"/>
-    <line x1="24" y1="15" x2="24" y2="27" stroke="#ea5b26" stroke-width="3.4"/>
-    <path d="M20 27 Q24 31 24 34 L24 49 M28 27 Q24 31 24 34" stroke="#ffffff" stroke-width="3.4"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00D4FF"></stop>
+      <stop offset="55%" stop-color="#6C63FF"></stop>
+      <stop offset="100%" stop-color="#FF7A59"></stop>
+    </linearGradient>
+    <linearGradient id="bowl" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"></stop>
+      <stop offset="100%" stop-color="#F3F7FF"></stop>
+    </linearGradient>
+    <linearGradient id="steam" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95"></stop>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.15"></stop>
+    </linearGradient>
+  </defs>
+  <circle cx="256" cy="256" r="240" fill="url(#bg)"></circle>
+  <circle cx="256" cy="256" r="180" fill="#FFFFFF" opacity="0.08"></circle>
+  <g fill="#FFFFFF" opacity="0.18">
+    <rect x="92" y="150" width="28" height="110" rx="4"></rect>
+    <rect x="126" y="118" width="40" height="142" rx="4"></rect>
+    <rect x="173" y="92" width="30" height="168" rx="4"></rect>
+    <rect x="210" y="132" width="44" height="128" rx="4"></rect>
+    <rect x="262" y="106" width="34" height="154" rx="4"></rect>
+    <rect x="303" y="84" width="48" height="176" rx="4"></rect>
+    <rect x="359" y="140" width="30" height="120" rx="4"></rect>
+    <rect x="395" y="112" width="26" height="148" rx="4"></rect>
   </g>
+  <path d="M132 286 C132 360 189 416 256 416 C323 416 380 360 380 286 Z" fill="url(#bowl)"></path>
+  <path d="M122 280 C160 257 205 246 256 246 C307 246 352 257 390 280" fill="none" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round"></path>
+  <path d="M160 294 C191 279 223 272 256 272 C289 272 321 279 352 294" fill="none" stroke="#6C63FF" stroke-width="8" stroke-linecap="round" opacity="0.9"></path>
+  <path d="M216 424 H296 C296 444 281 458 256 458 C231 458 216 444 216 424Z" fill="#FFFFFF"></path>
+  <path d="M222 190 C205 170 207 148 224 130 C239 115 241 99 229 84" fill="none" stroke="url(#steam)" stroke-width="10" stroke-linecap="round"></path>
+  <path d="M256 182 C241 164 243 144 259 128 C273 113 275 97 264 82" fill="none" stroke="url(#steam)" stroke-width="10" stroke-linecap="round"></path>
+  <path d="M290 190 C273 170 275 148 292 130 C307 115 309 99 297 84" fill="none" stroke="url(#steam)" stroke-width="10" stroke-linecap="round"></path>
+  <rect x="340" y="112" width="10" height="190" rx="5" fill="#FFD166" transform="rotate(25 345 112)"></rect>
+  <rect x="360" y="102" width="10" height="200" rx="5" fill="#FFFFFF" transform="rotate(25 365 102)"></rect>
 </svg>
