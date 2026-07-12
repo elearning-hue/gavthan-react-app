@@ -700,6 +700,38 @@ body::before{
 }
 
 /* ============================================================================
+   Look & feel polish — unified spring motion + tactile press (Linear/visionOS
+   feel). Skill: Modern Dark, spring easing bezier(.16,1,.3,1), scale-press 0.97.
+   ========================================================================== */
+:root{ --ease-spring:cubic-bezier(.16,1,.3,1); }
+
+/* One motion language: spring easing on the interactive chrome. */
+.btn,.qb,.nb,.cats button,.theme-toggle,.chip,.mi-price{transition-timing-function:var(--ease-spring)}
+
+/* Tactile press — subtle scale-down on tap, restore on release. */
+.btn:active{transform:scale(.97)}
+.btn-a:active{transform:scale(.97)}
+.qb:active{transform:scale(.9)}
+.cats button:active,.nb:active,.theme-toggle:active{transform:scale(.93)}
+.ccard:active{transform:scale(.995)}
+
+/* Typography: tighten display tracking; steadier data figures. */
+.logo{letter-spacing:-.03em}
+.ttl,.panel-h>span:first-child{letter-spacing:-.01em;font-weight:700}
+.mv,.kpi-v,.lock-timer{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+
+/* Keyboard focus parity across all interactive elements. */
+.btn:focus-visible,.nb:focus-visible,.cats button:focus-visible,.qb:focus-visible,
+.theme-toggle:focus-visible,.ccard:focus-visible,.mi-pick:focus-visible{outline:none;box-shadow:var(--ring)}
+
+/* Softer, more layered card elevation on the light theme. */
+.card{box-shadow:0 1px 2px rgba(17,24,39,.04), 0 6px 16px rgba(17,24,39,.05)}
+
+@media (prefers-reduced-motion:reduce){
+  .btn:active,.btn-a:active,.qb:active,.cats button:active,.nb:active,.theme-toggle:active,.ccard:active{transform:none}
+}
+
+/* ============================================================================
    Responsive — dashboard widens on web
    ========================================================================== */
 @media (min-width:768px){
