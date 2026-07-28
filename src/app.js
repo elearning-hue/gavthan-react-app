@@ -1892,21 +1892,22 @@ function HistoryTab(props){
       }),
       // Pagination controls
       shown.length>PAGE_SIZE&&h('div',{className:'row bw',style:{marginTop:10,paddingTop:8,borderTop:'1px solid var(--border)'}},
-        h('button',{className:'btn xs',onClick:function(){setPage(Math.max(0,safePage-1));},disabled:safePage===0,style:{opacity:safePage===0?0.4:1}},'← Prev'),
-        h('div',{style:{display:'flex',gap:3,flexWrap:'wrap',justifyContent:'center'}},
+        h('button',{className:'btn xs',onClick:function(){setPage(Math.max(0,safePage-1));},disabled:!(safePage>0),style:{flexShrink:0,opacity:safePage>0?1:0.4}},'← Prev'),
+        // Page numbers stay on ONE row; overflow scrolls horizontally instead of wrapping.
+        h('div',{style:{display:'flex',gap:3,flexWrap:'nowrap',justifyContent:'center',overflowX:'auto',minWidth:0,flex:1,scrollbarWidth:'none'}},
           (function(){
             var btns=[];
             var maxBtns=Math.min(7,totalPages);
             var start=Math.max(0,Math.min(safePage-3,totalPages-maxBtns));
             for(var p=start;p<start+maxBtns;p++){
               (function(pp){
-                btns.push(h('button',{key:pp,className:'btn xs'+(pp===safePage?' btn-a':''),style:{minWidth:28,padding:'4px 6px'},onClick:function(){setPage(pp);}},pp+1));
+                btns.push(h('button',{key:pp,className:'btn xs'+(pp===safePage?' btn-a':''),style:{minWidth:28,padding:'4px 6px',flexShrink:0},onClick:function(){setPage(pp);}},pp+1));
               })(p);
             }
             return btns;
           })()
         ),
-        h('button',{className:'btn xs',onClick:function(){setPage(Math.min(totalPages-1,safePage+1));},disabled:safePage>=totalPages-1,style:{opacity:safePage>=totalPages-1?0.4:1}},'Next →')
+        h('button',{className:'btn xs',onClick:function(){setPage(Math.min(totalPages-1,safePage+1));},disabled:!(safePage<totalPages-1),style:{flexShrink:0,opacity:safePage<totalPages-1?1:0.4}},'Next →')
       )
     )
   );
@@ -2056,16 +2057,21 @@ function CustomersTab(props){
   var custs=props.custs||[];
   var _q=useState('');var q=_q[0];var setQ=_q[1];
   var _page=useState(0);var page=_page[0];var setPage=_page[1];
+  var _sort=useState('recent');var sortBy=_sort[0];var setSortBy=_sort[1];
   var PAGE_SIZE=10;
 
-  // Group customers by phone (or name+room if no phone)
+  // Group customers by phone (or name+room if no phone).
+  // Auto-generated placeholder names (Cust 1, cust12, …) are NOT dropped — they are
+  // collated into one consolidated row, so this tab's revenue reconciles with History.
+  var GENERIC=/^cust\s*\d*$/i;
   var map={};
   custs.forEach(function(c){
-    if(!c.name||c.name.indexOf('Cust ')===0)return; // skip auto-generated default names
-    var key=(c.phone&&c.phone.length>=10)?c.phone:(c.name+'|'+(c.room||''));
+    if(!c.name)return;
+    var generic=GENERIC.test(c.name.trim());
+    var key=generic?'__generic__':((c.phone&&c.phone.length>=10)?c.phone:(c.name+'|'+(c.room||'')));
     var spent=c.status==='settled'?finalTotal(c):0;
     if(!map[key]){
-      map[key]={name:c.name,phone:c.phone||'',visits:0,settled:0,totalSpent:0,lastVisit:c.date};
+      map[key]={name:generic?'Walk-in / unnamed':c.name,phone:generic?'':(c.phone||''),generic:generic,visits:0,settled:0,totalSpent:0,lastVisit:c.date};
     }
     var r=map[key];
     r.visits++;
@@ -2073,7 +2079,11 @@ function CustomersTab(props){
     if(new Date(c.date)>new Date(r.lastVisit)) r.lastVisit=c.date;
   });
   var rows=Object.keys(map).map(function(k){return map[k];})
-    .sort(function(a,b){return new Date(b.lastVisit)-new Date(a.lastVisit);});
+    .sort(function(a,b){
+      if(sortBy==='rev-desc')return b.totalSpent-a.totalSpent;
+      if(sortBy==='rev-asc') return a.totalSpent-b.totalSpent;
+      return new Date(b.lastVisit)-new Date(a.lastVisit);
+    });
 
   var filtered=q.trim()?rows.filter(function(r){
     var s=q.toLowerCase();
@@ -2084,8 +2094,8 @@ function CustomersTab(props){
   var totalPages=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE));
   var safePage=Math.min(page,totalPages-1);
   var pageItems=filtered.slice(safePage*PAGE_SIZE,(safePage+1)*PAGE_SIZE);
-  // Reset to page 0 when the search changes
-  useEffect(function(){setPage(0);},[q]);
+  // Reset to page 0 when the search or sort changes
+  useEffect(function(){setPage(0);},[q,sortBy]);
 
   var totalRev=rows.reduce(function(s,r){return s+r.totalSpent;},0);
 
@@ -2097,8 +2107,16 @@ function CustomersTab(props){
     ),
     h('div',{className:'card'},
       h('div',{className:'ttl'},'Customers'),
-      h('div',{className:'muted',style:{fontSize:11,marginBottom:8}},'Unique customers identified by phone number (or name+room if no phone).'),
+      h('div',{className:'muted',style:{fontSize:11,marginBottom:8}},'Unique customers identified by phone number (or name+room if no phone). Unnamed walk-in orders are grouped into a single row.'),
       h('input',{placeholder:'Search by name or phone…',value:q,onChange:function(e){setQ(e.target.value);},style:{marginBottom:8}}),
+      h('div',{className:'row',style:{gap:6,marginBottom:8}},
+        h('span',{className:'muted',style:{fontSize:11,flexShrink:0}},'Sort by'),
+        h('select',{value:sortBy,onChange:function(e){setSortBy(e.target.value);},'aria-label':'Sort customers'},
+          h('option',{value:'recent'},'Most recent visit'),
+          h('option',{value:'rev-desc'},'Revenue — high to low'),
+          h('option',{value:'rev-asc'},'Revenue — low to high')
+        )
+      ),
       filtered.length>PAGE_SIZE&&h('div',{className:'muted',style:{fontSize:11,marginBottom:6}},
         'Page '+(safePage+1)+' of '+totalPages+' — '+filtered.length+' customers'),
       filtered.length===0?h('div',{className:'empty'},rows.length===0?'No customers yet.':'No matches.'):
@@ -2117,21 +2135,22 @@ function CustomersTab(props){
       }),
       // Pagination controls — mirrors HistoryTab: ← Prev · numbered pages · Next →
       filtered.length>PAGE_SIZE&&h('div',{className:'row bw',style:{marginTop:10,paddingTop:8,borderTop:'1px solid var(--border)'}},
-        h('button',{className:'btn xs',onClick:function(){setPage(Math.max(0,safePage-1));},disabled:safePage===0,style:{opacity:safePage===0?0.4:1}},'← Prev'),
-        h('div',{style:{display:'flex',gap:3,flexWrap:'wrap',justifyContent:'center'}},
+        h('button',{className:'btn xs',onClick:function(){setPage(Math.max(0,safePage-1));},disabled:!(safePage>0),style:{flexShrink:0,opacity:safePage>0?1:0.4}},'← Prev'),
+        // Page numbers stay on ONE row; overflow scrolls horizontally instead of wrapping.
+        h('div',{style:{display:'flex',gap:3,flexWrap:'nowrap',justifyContent:'center',overflowX:'auto',minWidth:0,flex:1,scrollbarWidth:'none'}},
           (function(){
             var btns=[];
             var maxBtns=Math.min(7,totalPages);
             var start=Math.max(0,Math.min(safePage-3,totalPages-maxBtns));
             for(var p=start;p<start+maxBtns;p++){
               (function(pp){
-                btns.push(h('button',{key:pp,className:'btn xs'+(pp===safePage?' btn-a':''),style:{minWidth:28,padding:'4px 6px'},onClick:function(){setPage(pp);}},pp+1));
+                btns.push(h('button',{key:pp,className:'btn xs'+(pp===safePage?' btn-a':''),style:{minWidth:28,padding:'4px 6px',flexShrink:0},onClick:function(){setPage(pp);}},pp+1));
               })(p);
             }
             return btns;
           })()
         ),
-        h('button',{className:'btn xs',onClick:function(){setPage(Math.min(totalPages-1,safePage+1));},disabled:safePage>=totalPages-1,style:{opacity:safePage>=totalPages-1?0.4:1}},'Next →')
+        h('button',{className:'btn xs',onClick:function(){setPage(Math.min(totalPages-1,safePage+1));},disabled:!(safePage<totalPages-1),style:{flexShrink:0,opacity:safePage<totalPages-1?1:0.4}},'Next →')
       )
     )
   );
