@@ -1024,6 +1024,22 @@ function App(props){
     itemQueueRef.current[cid]=next.catch(function(){}); // keep the chain alive on error
     return next;
   }
+  // R1 stock sync: after a successful settle, ask the DB to deduct stock for
+  // this bill via mh_apply_bill_stock (atomic + idempotent — safe to re-run).
+  // Fire-and-forget by design: the bill is already legally settled, so a sync
+  // failure must never roll back or block the cashier. Missed/failed syncs
+  // surface in mh_stock_sync_pending and are reconciled from the Inventory app.
+  // Unmapped lines are logged server-side (status 'unmapped'), never deducted.
+  function syncBillStock(cid){
+    supa.rpc('mh_apply_bill_stock',{p_bill_id:cid})
+      .then(function(r){
+        if(r.error)throw new Error(sbErr(r.error));
+        var res=(r.data&&r.data[0])||{};
+        if((res.unmapped||0)>0)
+          alert(res.unmapped+' item(s) on this bill have no stock mapping yet. Logged for an admin to map in the Inventory app.');
+      })
+      .catch(function(e){console.warn('Stock sync failed — bill will appear in the Inventory app pending list:',e);});
+  }
   function settle(cid){
     var cust=custs.find(function(c){return c.id===cid;});
     if(!cust)return;
@@ -1053,7 +1069,7 @@ function App(props){
         if(r.error)throw new Error(sbErr(r.error));
         return supa.from('mh_customers').update({status:'settled',settled_at:settledAt,bill_no:r.data}).eq('id',cid).eq('status','active');
       })
-      .then(function(r){if(r.error)throw new Error(sbErr(r.error));return fetchAll();})
+      .then(function(r){if(r.error)throw new Error(sbErr(r.error));syncBillStock(cid);return fetchAll();})
       .then(function(){if(selId===cid)setSelId(null);})
       .catch(showErr)
       .then(function(){delete settlingRef.current[cid];},function(){delete settlingRef.current[cid];});
