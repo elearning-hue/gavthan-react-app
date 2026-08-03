@@ -1035,8 +1035,12 @@ function App(props){
       .then(function(r){
         if(r.error)throw new Error(sbErr(r.error));
         var res=(r.data&&r.data[0])||{};
+        // Unmapped lines are logged server-side and surface in the Inventory
+        // app's reconcile view. No cashier-facing alert: mapping is admin-only
+        // (RLS), so the cashier cannot act on it — an alert on every bill would
+        // be pure noise at service time.
         if((res.unmapped||0)>0)
-          alert(res.unmapped+' item(s) on this bill have no stock mapping yet. Logged for an admin to map in the Inventory app.');
+          console.warn('Stock sync: '+res.unmapped+' unmapped item(s) on bill '+cid+' — logged for admin mapping.');
       })
       .catch(function(e){console.warn('Stock sync failed — bill will appear in the Inventory app pending list:',e);});
   }
