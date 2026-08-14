@@ -2060,23 +2060,35 @@ function CustomersTab(props){
   var _sort=useState('recent');var sortBy=_sort[0];var setSortBy=_sort[1];
   var PAGE_SIZE=10;
 
-  // Group customers by phone (or name+room if no phone).
-  // Auto-generated placeholder names (Cust 1, cust12, …) are NOT dropped — they are
-  // collated into one consolidated row, so this tab's revenue reconciles with History.
+  // Group STRICTLY by customer name — one row per name, nothing else considered.
+  // The key used to be the phone number (falling back to name+room), which split a
+  // single person across several rows whenever their orders carried different phone
+  // numbers or table/room values, so their lifetime total was never visible in one
+  // place. Name is normalised (trimmed, case-insensitive, whitespace collapsed) so
+  // "Ravi", "ravi" and "Ravi  " are one customer.
+  //
+  // Placeholder names (Cust 1, cust12, …) AND blank names collate into a single
+  // "Walk-in / unnamed" row. Blank-name orders were previously dropped outright,
+  // which silently removed their revenue from this tab's total.
   var GENERIC=/^cust\s*\d*$/i;
   var map={};
   custs.forEach(function(c){
-    if(!c.name)return;
-    var generic=GENERIC.test(c.name.trim());
-    var key=generic?'__generic__':((c.phone&&c.phone.length>=10)?c.phone:(c.name+'|'+(c.room||'')));
+    var raw=(c.name||'').trim();
+    var generic=!raw||GENERIC.test(raw);
+    var key=generic?'__generic__':raw.toLowerCase().replace(/\s+/g,' ');
     var spent=c.status==='settled'?finalTotal(c):0;
     if(!map[key]){
-      map[key]={name:generic?'Walk-in / unnamed':c.name,phone:generic?'':(c.phone||''),generic:generic,visits:0,settled:0,totalSpent:0,lastVisit:c.date};
+      map[key]={name:generic?'Walk-in / unnamed':raw,phone:generic?'':(c.phone||''),generic:generic,visits:0,settled:0,totalSpent:0,lastVisit:c.date};
     }
     var r=map[key];
     r.visits++;
     if(c.status==='settled'){r.settled++;r.totalSpent+=spent;}
-    if(new Date(c.date)>new Date(r.lastVisit)) r.lastVisit=c.date;
+    if(new Date(c.date)>new Date(r.lastVisit)){
+      r.lastVisit=c.date;
+      // Show the most recent spelling/phone the customer was booked under.
+      if(!generic){r.name=raw;if(c.phone)r.phone=c.phone;}
+    }
+    if(!generic&&!r.phone&&c.phone)r.phone=c.phone;
   });
   var rows=Object.keys(map).map(function(k){return map[k];})
     .sort(function(a,b){
@@ -2107,7 +2119,7 @@ function CustomersTab(props){
     ),
     h('div',{className:'card'},
       h('div',{className:'ttl'},'Customers'),
-      h('div',{className:'muted',style:{fontSize:11,marginBottom:8}},'Unique customers identified by phone number (or name+room if no phone). Unnamed walk-in orders are grouped into a single row.'),
+      h('div',{className:'muted',style:{fontSize:11,marginBottom:8}},'Grouped by customer name — one row per customer showing their total lifetime business. Unnamed / placeholder orders are grouped into a single walk-in row.'),
       h('input',{placeholder:'Search by name or phone…',value:q,onChange:function(e){setQ(e.target.value);},style:{marginBottom:8}}),
       h('div',{className:'row',style:{gap:6,marginBottom:8}},
         h('span',{className:'muted',style:{fontSize:11,flexShrink:0}},'Sort by'),
