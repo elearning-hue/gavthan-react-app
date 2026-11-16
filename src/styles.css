@@ -189,7 +189,17 @@ body{
 .hr{border:none;border-top:1px solid var(--border);margin:10px 0}
 .muted{color:var(--text-2)}
 .empty{text-align:center;padding:32px 14px;color:var(--text-3);font-size:13px}
-.sb{max-height:240px;overflow-y:auto}
+.sb{max-height:240px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y}
+/* Menu "Items in" rows: name reads fully; on phones the row wraps so the name
+   isn't crushed to an ellipsis by the action buttons. */
+.menu-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:640px){
+  /* Kill the inner 240px scroll box on phones — it traps touch-scroll inside a
+     scrolling page (nested-scroll anti-pattern). Let the page scroll instead. */
+  .sb{max-height:none;overflow:visible}
+  .menu-li{flex-wrap:wrap;row-gap:6px}
+  .menu-name{white-space:normal;overflow:visible;text-overflow:clip;flex-basis:100%;order:-1}
+}
 
 /* ── Form controls ──────────────────────────────────────────────────────── */
 input,select{
