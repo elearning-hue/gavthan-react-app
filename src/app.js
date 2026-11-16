@@ -270,6 +270,11 @@ function gtSetCookie(lang){
     document.cookie=lang?('googtrans=/en/'+lang+';path=/'+d):('googtrans=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT'+d);
   });}catch(e){}
 }
+// True when the page is currently translated to Marathi (googtrans cookie).
+function gtIsMarathi(){try{return /googtrans=[^;]*\/mr/.test(document.cookie);}catch(e){return false;}}
+// Brand wordmark: exact Marathi spelling when translated, else English. translate="no"
+// so Google doesn't mis-transliterate it ("Gavthan" -> wrong Devanagari).
+function brandMark(){return gtIsMarathi()?'गावठाण':'Gavthan';}
 function ensureGoogleTranslate(){
   if(_gtReady)return _gtReady;
   // Guard React against the classic removeChild/insertBefore DOMException that
@@ -1250,7 +1255,7 @@ function App(props){
     idleWarn&&online&&h('div',{style:{background:'var(--primary)',color:'#fff',padding:'6px 12px',fontSize:12,fontWeight:600,textAlign:'center'}},
       '⏱ You will be logged out in 1 minute due to inactivity. Move the mouse or tap to stay signed in.'),
     h('div',{className:'hdr'},
-      h('div',{className:'logo'},h('em',null,'Gavthan')),
+      h('div',{className:'logo'},h('em',{translate:'no'},brandMark())),
       h('div',{className:'nav'},tabs.map(function(t){
         return h('button',{key:t[0],className:'nb'+(tab===t[0]?' on':''),onClick:function(){setTab(t[0]);}},t[1]);
       })),
@@ -2030,9 +2035,9 @@ function MenuTab(props){
             h('div',{className:'row',style:{gap:4}},h('button',{className:'btn btn-a xs',onClick:doSaveItem},'✓ Save'),h('button',{className:'btn xs',onClick:function(){setEditId(null);}},'Cancel'))
           );
           var avail=it.available!==false;
-          return h('div',{key:it.id,'data-itemid':it.id,className:'li',style:{opacity:avail?1:0.55}},
+          return h('div',{key:it.id,'data-itemid':it.id,className:'li menu-li',style:{opacity:avail?1:0.55}},
             h('span',{className:'dh',title:'Drag to reorder',style:{cursor:'grab',touchAction:'none',userSelect:'none',color:'var(--text-3)',padding:'0 4px',fontSize:14,fontWeight:700,flexShrink:0}},'⋮⋮'),
-            h('span',{style:{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},it.name,!avail&&h('span',{style:{fontSize:10,color:'#991B1B',fontWeight:700,marginLeft:5}},'OUT OF STOCK')),
+            h('span',{className:'menu-name'},it.name,!avail&&h('span',{style:{fontSize:10,color:'#991B1B',fontWeight:700,marginLeft:5}},'OUT OF STOCK')),
             h('span',{style:{fontWeight:700,color:'var(--primary)',minWidth:40,textAlign:'right'}},'₹'+it.price),
             h('button',{className:'btn xs '+(avail?'btn-r':'btn-g'),style:{marginLeft:8},onClick:function(){toggleMenuAvail(it.id,!avail);}},avail?'Mark Out':'Mark In'),
             h('button',{className:'btn xs',onClick:function(){setEditId(it.id);setEditN(it.name);setEditP(''+it.price);}},'✏ Edit'),
