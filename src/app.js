@@ -1045,11 +1045,21 @@ function App(props){
     settlingRef.current[cid]=true;
     // settled_at = the official, immutable "Bill Date & Time" and single source of
     // truth. Frozen ONCE here and never recomputed:
-    //   • backdated order  → lock to the manually chosen creation date (cust.date)
-    //   • same-day order   → the settle moment (now)
-    var orderDate=cust.date?new Date(cust.date):new Date();
-    var isBackdated=orderDate.toDateString()!==new Date().toDateString();
-    var settledAt=isBackdated?orderDate.toISOString():new Date().toISOString();
+    //   • backdated order  → lock to the manually chosen date (cust.date)
+    //   • every other order → the settle moment (now)
+    // "Backdated" means the order's date is an EARLIER DAY than the day it was really
+    // created (created_at). The old test — "the order's date is not today" — also matched
+    // an order opened in the evening and settled after midnight: bill 171, opened 15 Nov
+    // 8:07 PM and settled 16 Nov 12:19 AM, was stamped with the evening before and counted
+    // in the previous day's sales. Same rule as the Android app (AppViewModel.settle).
+    function dayStart(v){
+      if(!v)return null;
+      var d=new Date(v);
+      return isNaN(d.getTime())?null:new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();
+    }
+    var orderDay=dayStart(cust.date),createdDay=dayStart(cust.created_at);
+    var isBackdated=orderDay!==null&&createdDay!==null&&orderDay<createdDay;
+    var settledAt=isBackdated?new Date(cust.date).toISOString():new Date().toISOString();
     // Atomic, server-side bill-number allocation (next_bill_no RPC from SECURITY-MIGRATION.sql).
     // .eq('status','active') makes the stamp idempotent: a concurrent settle updates 0 rows
     // and the DB's unique index on bill_no guarantees numbers can never collide.
