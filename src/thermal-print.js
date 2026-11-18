@@ -93,6 +93,29 @@ const __thermalGlobal = {};
     };
   }
 
+  // ─── UPI QR as a raster image (GS v 0) ───────────────────────────
+  // [modules]: rows of booleans (no border). Every module becomes a whole number of
+  // printer dots (min 3) with a 4-module white border, so the printed code is sharp.
+  function qrRaster(modules, maxDots) {
+    if (!modules || !modules.length) return null;
+    var quiet = 4, n = modules.length + 2 * quiet;
+    var dot = Math.min(8, Math.floor(maxDots / n));
+    if (dot < 3) return null;
+    var side = n * dot, bpr = Math.ceil(side / 8);
+    var data = new Uint8Array(bpr * side);
+    for (var y = 0; y < modules.length; y++) for (var x = 0; x < modules.length; x++) {
+      if (!modules[y][x]) continue;
+      for (var dy = 0; dy < dot; dy++) for (var dx = 0; dx < dot; dx++) {
+        var px = (x + quiet) * dot + dx, py = (y + quiet) * dot + dy;
+        data[py * bpr + (px >> 3)] |= (0x80 >> (px & 7));
+      }
+    }
+    var head = [GS, 0x76, 0x30, 0x00, bpr & 0xFF, (bpr >> 8) & 0xFF, side & 0xFF, (side >> 8) & 0xFF];
+    var out = new Uint8Array(head.length + data.length);
+    out.set(head, 0); out.set(data, head.length);
+    return out;
+  }
+
   // ─── Helpers ──────────────────────────────────────────────────────
   function tot(items) {
     var s = 0; for (var i = 0; i < (items||[]).length; i++) s += items[i].price * items[i].qty;
@@ -106,6 +129,7 @@ const __thermalGlobal = {};
     opts = opts || {};
     var hotel = opts.hotel || 'Gavthan';
     var upi   = opts.upi || '';
+    var qr    = opts.qrModules || null; // UPI QR grid (see upi-qr.js), or null
     var billNo = cust.bill_no || opts.previewBillNo;
     // Immutable official Bill Date & Time — settled_at is the single source of truth
     // (see billDateTime in app.js); falls back to the order date for unsettled previews.
@@ -162,13 +186,15 @@ const __thermalGlobal = {};
      .raw(CMD.NORMAL_SIZE).raw(CMD.BOLD_OFF)
      .ruler('=');
 
-    // UPI footer
-    if (upi) {
+    // UPI footer: QR (uploaded, or made from the UPI ID with this bill's amount) and/or the
+    // UPI ID. No "Amount" line (same as the Android app). Left out entirely when neither is set.
+    var qrImg = qr ? qrRaster(qr, 300) : null;
+    if (upi || qrImg) {
       b.raw(CMD.ALIGN_C).raw(CMD.LF)
-       .line('Pay via UPI')
-       .line(upi)
-       .line('Amount: Rs' + grand)
-       .raw(CMD.LF);
+       .line(qrImg ? 'Scan to pay (UPI)' : 'Pay via UPI');
+      if (qrImg) b.raw(qrImg).raw(CMD.LF);
+      if (upi) b.line(upi);
+      b.raw(CMD.LF);
     }
 
     // Footer

@@ -22,6 +22,7 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
 import { ESCPOS, ThermalPrinter } from './thermal-print.js';
+import { validUpiQr, payeeOf, upiLinkFor, qrModules, qrPngDataUrl, readQrFromFile } from './upi-qr.js';
 
 // ── Bind the names the original code references as globals ──
 // The monolith called window.supabase.createClient(...); expose the same shape.
@@ -525,6 +526,9 @@ function LoginScreen(){
   function readLock(e){return e?(Number(lsGet(kLock(e)))||0):0;}
 
   var _email=useState('');var email=_email[0];var setEmail=_email[1];
+  // Mobile number is the default way in; email is one click away.
+  var _useEmail=useState(false);var useEmail=_useEmail[0];var setUseEmail=_useEmail[1];
+  var _mobile=useState('');var mobile=_mobile[0];var setMobile=_mobile[1];
   var _pass=useState('');var pass=_pass[0];var setPass=_pass[1];
   var _err=useState('');var err=_err[0];var setErr=_err[1];
   var _busy=useState(false);var busy=_busy[0];var setBusy=_busy[1];
@@ -581,7 +585,30 @@ function LoginScreen(){
       });
   }
 
+  // Mobile number + password. The phone-login Edge Function finds the account behind the
+  // number and checks the password on the server (the email is never sent here), then
+  // returns a refresh token that becomes this browser's session. Wrong attempts are
+  // counted and locked on the server (5 → 15 min). Same profile checks as email sign-in.
+  function doAuthPhone(){
+    var ph=normPhone(mobile);
+    if(ph.length!==10||!pass){setErr('Enter your 10-digit mobile number and password.');return;}
+    setBusy(true);setErr('');setConfirmMsg('');
+    var url=(SUPABASE_URL||'').replace(/\/rest\/v1\/?$/,'').replace(/\/$/,'')+'/functions/v1/phone-login';
+    fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},body:JSON.stringify({phone:ph,password:pass})})
+      .then(function(rs){return rs.json().catch(function(){return {};}).then(function(j){
+        if(rs.status===404)throw new Error('Sign-in with mobile number is not set up yet. Use your email instead.');
+        if(!rs.ok||!j.refresh_token)throw new Error(j.error||('Sign-in failed (HTTP '+rs.status+').'));
+        return supa.auth.refreshSession({refresh_token:j.refresh_token});
+      });})
+      .then(function(r){
+        if(r.error||!r.data||!r.data.user)throw new Error((r.error&&r.error.message)||'Sign-in failed.');
+        return finishAuth(r.data.user);
+      })
+      .catch(function(e){setErr(e.message);setBusy(false);});
+  }
+
   function doAuth(){
+    if(!useEmail){doAuthPhone();return;}
     var em=normE(email);
     if(!email.trim()||!pass){setErr('Email and password required.');return;}
     if(readLock(em)>Date.now()){lockNow(em,readLock(em));return;} // this account is locked
@@ -622,6 +649,8 @@ function LoginScreen(){
   }
 
   function doForgot(){
+    // No SMS: with a mobile number, an admin sets a new password (free).
+    if(!useEmail){setErr('');setConfirmMsg('Ask your admin to set a new password for you (Users tab → Set password).');return;}
     var em=(email.trim()||prompt('Enter your registered email:')||'').trim();
     if(!em)return;
     setBusy(true);setErr('');setConfirmMsg('');
@@ -659,8 +688,12 @@ function LoginScreen(){
             )
           : h('div',null,
               err&&h('div',{className:'msg-err',role:'alert'},err),
-              h('div',{className:'fld'},h('label',{htmlFor:'lg-email'},'Email'),
-                h('input',{id:'lg-email',type:'email',autoComplete:'username',inputMode:'email',value:email,onChange:function(e){setEmail(e.target.value);},placeholder:'you@example.com',onKeyDown:onKey})),
+              useEmail
+                ? h('div',{className:'fld'},h('label',{htmlFor:'lg-email'},'Email'),
+                    h('input',{id:'lg-email',type:'email',autoComplete:'username',inputMode:'email',value:email,onChange:function(e){setEmail(e.target.value);},placeholder:'you@example.com',onKeyDown:onKey}))
+                : h('div',{className:'fld'},h('label',{htmlFor:'lg-mobile'},'Mobile number'),
+                    h('input',{id:'lg-mobile',type:'tel',autoComplete:'tel-national',inputMode:'tel',value:mobile,maxLength:16,
+                      onChange:function(e){setMobile(e.target.value.replace(/[^0-9+ ]/g,''));},placeholder:'98765 43210',onKeyDown:onKey})),
               h('div',{className:'fld',style:{marginBottom:18}},h('label',{htmlFor:'lg-pass'},'Password'),
                 h('div',{className:'pw-wrap'},
                   h('input',{id:'lg-pass',type:showPw?'text':'password',autoComplete:'current-password',value:pass,onChange:function(e){setPass(e.target.value);},placeholder:'Your password',onKeyDown:onKey}),
@@ -669,7 +702,8 @@ function LoginScreen(){
               ),
               h('button',{className:'btn btn-a',style:{width:'100%',justifyContent:'center',marginBottom:10},onClick:doAuth,disabled:busy},
                 busy&&h('span',{className:'spin'}),'Sign in'),
-              h('div',{style:{textAlign:'center',fontSize:11.5,marginBottom:8}},
+              h('div',{style:{textAlign:'center',fontSize:11.5,marginBottom:8,display:'flex',justifyContent:'center',gap:16,flexWrap:'wrap'}},
+                h('span',{className:'login-link',onClick:function(){setUseEmail(!useEmail);setErr('');}},useEmail?'Use mobile number instead':'Use email instead'),
                 h('span',{className:'login-link',onClick:doForgot},'Forgot password?')
               ),
               h('div',{className:'login-foot'},'No account? Ask your admin to add you.')
@@ -699,6 +733,8 @@ function App(props){
   var _timeout=useState(30);var sessionTimeout=_timeout[0];var setSessionTimeout=_timeout[1];
   // UPI ID for bills — DB-configurable (mh_config.app.data.upiId), falls back to the build-time constant
   var _upi=useState(UPI_ID);var upiId=_upi[0];var setUpiId=_upi[1];
+  // The shop's UPI QR (its upi://pay text), shared by every device through mh_config.
+  var _upiQr=useState('');var upiQrText=_upiQr[0];var setUpiQrText=_upiQr[1];
   // In-flight settle guard — prevents a double-tap (or lag) from allocating two bill numbers.
   var settlingRef=React.useRef({});
   // Per-order write queue — serializes +/- item taps so a fast burst can't read the
@@ -757,6 +793,9 @@ function App(props){
             setSessionTimeout(Number(d.sessionTimeout)||30);
           if(d&&typeof d.upiId==='string')
             setUpiId(d.upiId);
+          // Missing key = never set: leave it. An empty value = removed by an admin.
+          if(d&&typeof d.upiQrText==='string')
+            setUpiQrText(validUpiQr(d.upiQrText));
         },function(){});
     }
     loadConfig();
@@ -974,6 +1013,20 @@ function App(props){
       .catch(showErr);
   }
 
+  // Save (or, with '', remove) the shared UPI QR. Read-merge-write so no other setting is lost.
+  function saveUpiQr(text){
+    var v=validUpiQr(text);
+    setUpiQrText(v);
+    return supa.from('mh_config').select('data').eq('id','app').maybeSingle()
+      .then(function(r){
+        if(r.error)throw new Error(sbErr(r.error));
+        var cfg=(r.data&&r.data.data)||{};
+        cfg.upiQrText=v;
+        return supa.from('mh_config').upsert({id:'app',data:cfg});
+      })
+      .then(function(r){if(r&&r.error)throw new Error(sbErr(r.error));});
+  }
+
   function showErr(e){setAppErr(e.message||String(e));}
 
   // ── Customer ops ──
@@ -1169,7 +1222,9 @@ function App(props){
   }
 
   // ── User management ──
-  function addUser(newEmail,newPass,newName,cb){
+  function addUser(newEmail,newPass,newName,cb,newPhone){
+    var phone=normPhone(newPhone||'');
+    if(phone&&phone.length!==10){cb('Mobile number must be 10 digits (or leave it empty).');return;}
     var email=(newEmail||'').trim();
     var pass=newPass||'';
     var name=(newName||'').trim();
@@ -1184,7 +1239,7 @@ function App(props){
       return fetch(url,{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+jwt,'apikey':SUPABASE_KEY},
-        body:JSON.stringify({action:'create-user',email:email,password:pass,displayName:name,role:role})
+        body:JSON.stringify({action:'create-user',email:email,password:pass,displayName:name,role:role,phone:phone})
       }).then(function(rs){return rs.json().then(function(j){
         if(!rs.ok) throw new Error(j.error||('HTTP '+rs.status));
         return j;
@@ -1206,6 +1261,26 @@ function App(props){
       return fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+jwt,'apikey':SUPABASE_KEY},body:JSON.stringify(payload)})
         .then(function(rs){return rs.json().then(function(j){if(!rs.ok)throw new Error(j.error||('HTTP '+rs.status));return j;});});
     });
+  }
+  // Mobile number the user signs in with ('' removes it). Admin only, through user-admin.
+  function setUserPhone(u){
+    var cur=u.phone||'';
+    var input=prompt('Mobile number for '+(u.display_name||u.email)+'\n(they sign in with this number and their password; leave empty to remove):',cur);
+    if(input===null)return;
+    var ph=normPhone(input);
+    if(input.trim()&&ph.length!==10){alert('Mobile number must be 10 digits.');return;}
+    callUserAdmin({action:'set-phone',userId:u.id,phone:ph})
+      .then(function(){fetchAll();alert(ph?'Mobile number saved.':'Mobile number removed.');})
+      .catch(function(e){alert('Error: '+e.message);});
+  }
+  // A new password for someone who forgot theirs. Free: no SMS or email involved.
+  function setUserPassword(u){
+    var pw=prompt('New password for '+(u.display_name||u.email)+' (at least 6 characters).\nTell them in person; it works at once:','');
+    if(pw===null)return;
+    if(pw.length<6){alert('Password must be at least 6 characters.');return;}
+    callUserAdmin({action:'set-password',userId:u.id,password:pw})
+      .then(function(){alert('New password set.');})
+      .catch(function(e){alert('Error: '+e.message);});
   }
   function toggleUserActive(id,current){
     callUserAdmin({action:'set-active',userId:id,active:!current})
@@ -1310,9 +1385,9 @@ function App(props){
       tab==='menu'    &&admin&&h(MenuTab,{cats,saveCats,menu,addMenuItem,updateMenuItem,deleteMenuItem,toggleMenuAvail,reorderItems}),
       tab==='customers'&&admin&&h(CustomersTab,{custs}),
       tab==='manager' &&admin&&h(ManagerTab,{custs,cats,users}),
-      tab==='users'   &&superAdmin&&h(UsersTab,{users,currentUid:user.id,currentEmail:user.email,superAdmin:superAdmin,addUser,toggleUserActive,changeUserRole,sendReset,deleteUser,sessionTimeout,saveSessionTimeout,upiId,saveUpiId,backupDatabase,restoreFromBackup,driveInterval,saveDriveInterval,driveLast})
+      tab==='users'   &&superAdmin&&h(UsersTab,{users,currentUid:user.id,currentEmail:user.email,superAdmin:superAdmin,addUser,toggleUserActive,changeUserRole,sendReset,deleteUser,setUserPhone,setUserPassword,sessionTimeout,saveSessionTimeout,upiId,saveUpiId,upiQrText,saveUpiQr,backupDatabase,restoreFromBackup,driveInterval,saveDriveInterval,driveLast})
     ),
-    billCust&&h(BillModal,{cust:billCust,cats,previewBillNo:previewBillNo,upiId:upiId,onClose:function(){setBillId(null);},
+    billCust&&h(BillModal,{cust:billCust,cats,previewBillNo:previewBillNo,upiId:upiId,upiQrText:upiQrText,onClose:function(){setBillId(null);},
       updateCustomer:updateCustomer,
       onSavePhone:function(ph){
         supa.from('mh_customers').update({phone:ph}).eq('id',billCust.id)
@@ -2217,6 +2292,8 @@ function UsersTab(props){
   var sendReset=props.sendReset,deleteUser=props.deleteUser;
   var sessionTimeout=props.sessionTimeout,saveSessionTimeout=props.saveSessionTimeout;
   var upiId=props.upiId||'',saveUpiId=props.saveUpiId;
+  var upiQrText=props.upiQrText||'',saveUpiQr=props.saveUpiQr;
+  var setUserPhone=props.setUserPhone,setUserPassword=props.setUserPassword;
   var backupDatabase=props.backupDatabase;
   var restoreFromBackup=props.restoreFromBackup;
   var driveInterval=props.driveInterval||'off',saveDriveInterval=props.saveDriveInterval,driveLast=props.driveLast;
@@ -2280,6 +2357,24 @@ function UsersTab(props){
   var _to=useState(String(sessionTimeout||30));var toVal=_to[0];var setToVal=_to[1];
   var _upiV=useState(upiId);var upiVal=_upiV[0];var setUpiVal=_upiV[1];
   var _upiMsg=useState('');var upiMsg=_upiMsg[0];var setUpiMsg=_upiMsg[1];
+  var _qrMsg=useState('');var qrMsg=_qrMsg[0];var setQrMsg=_qrMsg[1];
+  var _qrBusy=useState(false);var qrBusy=_qrBusy[0];var setQrBusy=_qrBusy[1];
+  var _nph=useState('');var newPhone=_nph[0];var setNewPhone=_nph[1];
+  var qrPreview=React.useMemo(function(){return upiQrText?qrPngDataUrl(upiQrText,480):null;},[upiQrText]);
+  function onQrFile(e){
+    var f=e.target.files&&e.target.files[0];
+    e.target.value='';
+    if(!f)return;
+    setQrBusy(true);setQrMsg('Reading…');
+    // The code is read out of the picture; what is saved and shared is its text.
+    readQrFromFile(f).then(function(raw){
+      var link=validUpiQr(raw);
+      if(raw==null){setQrMsg('No QR code found in that picture. Use a clear, straight picture of the code.');return;}
+      if(!link){setQrMsg('That QR code is not a UPI payment code.');return;}
+      return saveUpiQr(link).then(function(){setQrMsg('✓ QR code saved for all devices.');});
+    }).catch(function(err){setQrMsg('Error: '+err.message);})
+      .then(function(){setQrBusy(false);});
+  }
   useEffect(function(){setUpiVal(upiId);},[upiId]);
   // Thermal printer settings
   var _thermSettings=useState(ThermalPrinter.settings());var thermSettings=_thermSettings[0];var setThermSettingsState=_thermSettings[1];
@@ -2296,8 +2391,8 @@ function UsersTab(props){
     setBusy(true);setMsg('');
     addUser(newEmail.trim(),newPass,newName.trim(),function(err,ok){
       setBusy(false);
-      if(err){setMsg('Error: '+err);}else{setMsg(ok||'Done!');setNewEmail('');setNewPass('');setNewName('');}
-    });
+      if(err){setMsg('Error: '+err);}else{setMsg(ok||'Done!');setNewEmail('');setNewPass('');setNewName('');setNewPhone('');}
+    },newPhone);
   }
   function isOnline(u){
     if(!u.last_seen_at) return false;
@@ -2333,6 +2428,28 @@ function UsersTab(props){
       ),
       h('div',{className:'muted',style:{fontSize:10,marginTop:4}},upiId?('Currently: '+upiId):'No UPI ID set — the UPI block is hidden on bills.'),
       upiMsg&&h('div',{style:{marginTop:6,fontSize:12,color:upiMsg.indexOf('✓')!==-1?'#166534':'#991B1B'}},upiMsg)
+    ),
+    // UPI QR card — shared by every device; printed in the payment block of every bill
+    h('div',{className:'card'},
+      h('div',{className:'ttl'},'UPI QR code on bills'),
+      h('div',{className:'muted',style:{fontSize:11,marginBottom:8}},
+        upiQrText?'Printed in the payment block of every bill, on every device.'
+          :upiId?'No QR uploaded. Bills print a QR made from the UPI ID above, with the bill amount filled in.'
+          :'No QR code and no UPI ID. Bills print without a payment block.'),
+      qrPreview&&h('div',{style:{display:'flex',alignItems:'center',gap:12,marginBottom:8,flexWrap:'wrap'}},
+        h('img',{src:qrPreview.url,alt:'UPI QR code',width:160,height:160,style:{imageRendering:'pixelated',background:'#fff',padding:4,borderRadius:6,border:'1px solid var(--border)'}}),
+        h('div',{style:{fontSize:12}},'Pays to: ',h('b',{translate:'no'},payeeOf(upiQrText)||'(not stated in the code)'))
+      ),
+      h('div',{className:'row',style:{gap:6,flexWrap:'wrap'}},
+        h('label',{className:'btn btn-a xs',style:{cursor:qrBusy?'wait':'pointer',opacity:qrBusy?0.6:1}},qrBusy?'Reading…':(upiQrText?'Change QR':'Upload QR'),
+          h('input',{type:'file',accept:'image/*',style:{display:'none'},disabled:qrBusy,onChange:onQrFile})),
+        upiQrText&&h('button',{className:'btn btn-r xs',onClick:function(){
+          if(!confirm('Remove the UPI QR code from all bills?'))return;
+          saveUpiQr('').then(function(){setQrMsg('✓ QR code removed.');}).catch(function(err){setQrMsg('Error: '+err.message);});
+        }},'Remove QR')
+      ),
+      h('div',{className:'muted',style:{fontSize:10,marginTop:4}},'Shared with every device (web and phones) through the database.'),
+      qrMsg&&h('div',{style:{marginTop:6,fontSize:12,color:qrMsg.indexOf('✓')!==-1?'#166534':(qrMsg==='Reading…'?'var(--text-2)':'#991B1B')}},qrMsg)
     ),
     // Thermal Printer Settings card
     h('div',{className:'card'},
@@ -2443,10 +2560,15 @@ function UsersTab(props){
               h('span',{style:{fontWeight:700,fontSize:13}},u.display_name||u.email)
             ),
             h('div',{className:'muted',style:{fontSize:11}},u.email),
+            h('div',{className:'muted',style:{fontSize:11}},u.phone?('Mobile: '+String(u.phone).slice(0,5)+' '+String(u.phone).slice(5)):'No mobile number'),
             u.last_seen_at&&!online&&h('div',{className:'muted',style:{fontSize:10}},'Last seen: '+fmtDT(u.last_seen_at))
           ),
           h('span',{className:u.role==='admin'?'badge-admin':'badge-user'},u.role||'user'),
           !u.active&&h('span',{className:'badge-off'},'Disabled'),
+          h('div',{className:'row',style:{gap:4,flexWrap:'wrap'}},
+            setUserPhone&&h('button',{className:'btn xs',onClick:function(){setUserPhone(u);},title:'Mobile number used to sign in'},u.phone?'📱 Change mobile':'📱 Add mobile'),
+            setUserPassword&&h('button',{className:'btn xs btn-y',onClick:function(){setUserPassword(u);},title:'Set a new password (free, no SMS)'},'🔑 Set password')
+          ),
           !isSelf&&h('div',{className:'row',style:{gap:4,flexWrap:'wrap'}},
             h('button',{className:'btn xs btn-y',onClick:function(){sendReset(u.email);},'title':'Send reset email'},'📧 Reset Pwd'),
             h('button',{className:'btn xs',onClick:function(){changeUserRole(u.id,u.role==='admin'?'user':'admin');}},u.role==='admin'?'→ Staff':'→ Admin'),
@@ -2460,7 +2582,7 @@ function UsersTab(props){
     h('div',{className:'card'},
       h('div',{className:'ttl'},'Add New Staff'),
       h('div',{className:'msg-ok',style:{fontSize:11,marginBottom:10,padding:'7px 10px'}},'✓ Admin session is protected — adding user will not sign you out.'),
-      [['Name','Full name',newName,setNewName,'text'],['Email','staff@hotel.com',newEmail,setNewEmail,'email'],['Temp Password','Min 6 characters',newPass,setNewPass,'password']].map(function(f){
+      [['Name','Full name',newName,setNewName,'text'],['Email','staff@hotel.com',newEmail,setNewEmail,'email'],['Mobile (to sign in, optional)','98765 43210',newPhone,setNewPhone,'tel'],['Temp Password','Min 6 characters',newPass,setNewPass,'password']].map(function(f){
         return h('div',{key:f[0],style:{marginBottom:8}},
           h('div',{className:'muted',style:{fontSize:11,marginBottom:3}},f[0]),
           h('input',{value:f[2],onChange:function(e){f[3](e.target.value);},placeholder:f[1],type:f[4],onKeyDown:function(e){if(e.key==='Enter')doAdd();}})
@@ -2659,6 +2781,8 @@ function BillModal(props){
   var previewBillNo=props.previewBillNo;
   // UPI ID from live config (falls back to the build-time constant for older callers)
   var upiId=props.upiId!=null?props.upiId:UPI_ID;
+  // Payment QR: the uploaded one, else one made from the UPI ID with this bill's amount.
+  var payLink=validUpiQr(props.upiQrText)||(upiId&&finalTotal(cust)>0?upiLinkFor(upiId,finalTotal(cust),HOTEL_NAME):'');
   // Displayed bill number = locked one if settled, else current preview (lastBillNo+1)
   // STRICT: settled bills lock to their stored bill_no immutably; preview only used for unsettled
   // Only show a bill number once it is actually assigned at settle. Printing the
@@ -2780,6 +2904,15 @@ function BillModal(props){
     var fullCss='@page{size:80mm auto;margin:3mm}'+cleanCss;
     printInNewWindow(title,fullCss,bill.body);
   }
+  // Payment block: QR (drawn dot-for-dot, never a resized photo) and/or the UPI ID.
+  // No "Amount" line. Left out entirely when neither is set.
+  function payBlock(){
+    var qr=payLink?qrPngDataUrl(payLink,240):null;
+    if(!upiId&&!qr)return '';
+    return '<hr><div style="text-align:center;font-size:11px;margin-top:6px"><b>'+(qr?'Scan to pay (UPI)':'Pay via UPI')+'</b>'
+      +(qr?'<br/><img src="'+qr.url+'" width="150" height="150" style="image-rendering:pixelated;image-rendering:crisp-edges;margin:4px auto;display:block" alt="UPI QR"/>':'')
+      +(upiId?'<br/>'+escHtml(upiId):'')+'</div>';
+  }
   // Builds the receipt HTML used by both Print and JPEG export (identical layout)
   function buildBillHTML(){
     var css='*{box-sizing:border-box}body{font-family:"Courier New",monospace;font-size:12px;padding:14px;max-width:320px;margin:0 auto}h2{text-align:center;font-size:18px;letter-spacing:3px;margin-bottom:2px}.sub{text-align:center;font-size:11px;color:#666;margin-bottom:12px;border-bottom:1px dashed #ccc;padding-bottom:8px}.inf{display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px}hr{border:1px dashed #bbb;margin:7px 0}table{width:100%;border-collapse:collapse;font-size:12px}th{padding:3px 0;border-bottom:1px solid #999;text-align:left;font-weight:bold}th:not(:first-child),td:not(:first-child){text-align:right}td{padding:3px 0;border-bottom:1px dotted #eee}.sl{display:flex;justify-content:space-between;font-size:11px;margin:2px 0}.tot{display:flex;justify-content:space-between;font-size:15px;font-weight:bold;padding-top:8px;border-top:2px solid #333;margin-top:6px}.foot{text-align:center;font-size:11px;color:#666;margin-top:14px;border-top:1px dashed #ccc;padding-top:8px}';
@@ -2794,7 +2927,7 @@ function BillModal(props){
     }
     // Date/time shown on the bill = the immutable official Bill Date & Time (see billDateTime)
     var billTs=billDateTime(cust)||cust.date;
-    var body='<h2>GAVTHAN</h2><div class="sub">Receipt / Bill'+(displayBillNo?' '+fmtBill(displayBillNo):'')+'</div><div class="inf"><span><b>'+escHtml(cust.name)+'</b></span><span>'+escHtml(dateOf(billTs))+'</span></div><div class="inf"><span>Room/Table: <b>'+escHtml(cust.room)+'</b></span><span>'+escHtml(timeOf(billTs))+'</span></div>'+(cust.phone?'<div class="inf"><span>Ph: '+escHtml(cust.phone)+'</span></div>':'')+'<hr><table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amt</th></tr></thead><tbody>'+rows+'</tbody></table><hr>'+breakdown+'<div class="tot"><span>TOTAL</span><span>&#8377;'+t+'</span></div>'+(upiId?'<hr><div style="text-align:center;font-size:11px;margin-top:6px"><b>Pay via UPI</b><br/>'+escHtml(upiId)+'<br/>Amount: &#8377;'+t+'</div>':'')+'<div class="foot">Thank you for visiting Gavthan!<br>Please come again.</div>';
+    var body='<h2>GAVTHAN</h2><div class="sub">Receipt / Bill'+(displayBillNo?' '+fmtBill(displayBillNo):'')+'</div><div class="inf"><span><b>'+escHtml(cust.name)+'</b></span><span>'+escHtml(dateOf(billTs))+'</span></div><div class="inf"><span>Room/Table: <b>'+escHtml(cust.room)+'</b></span><span>'+escHtml(timeOf(billTs))+'</span></div>'+(cust.phone?'<div class="inf"><span>Ph: '+escHtml(cust.phone)+'</span></div>':'')+'<hr><table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amt</th></tr></thead><tbody>'+rows+'</tbody></table><hr>'+breakdown+'<div class="tot"><span>TOTAL</span><span>&#8377;'+t+'</span></div>'+payBlock()+'<div class="foot">Thank you for visiting Gavthan!<br>Please come again.</div>';
     return {css:css,body:body};
   }
 
@@ -2856,7 +2989,7 @@ function BillModal(props){
   function thermalPrint(){
     if(t===0){alert('Cannot print a zero-amount bill.');return;}
     try{
-      var bytes=ESCPOS.encodeBill(cust,{hotel:HOTEL_NAME,upi:upiId,previewBillNo:displayBillNo});
+      var bytes=ESCPOS.encodeBill(cust,{hotel:HOTEL_NAME,upi:upiId,previewBillNo:displayBillNo,qrModules:payLink?qrModules(payLink):null});
       ThermalPrinter.print(bytes).catch(function(e){
         alert('Thermal print failed: '+e.message+'\n\nTip: Configure transport in Users → Thermal Printer Settings, or use PDF/JPEG instead.');
       });
