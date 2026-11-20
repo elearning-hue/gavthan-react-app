@@ -157,7 +157,13 @@ const __thermalGlobal = {};
      .ruler('-')
      .line('Customer : ' + (cust.name || '-'))
      .line('Room/Tbl : ' + (cust.room || '-'));
-    if (cust.phone) b.line('Phone    : ' + cust.phone);
+    // Privacy: hide the first 6 digits of the customer number, keep the last 4.
+    // ASCII '*' because the encoder drops non-ASCII glyphs.
+    if (cust.phone) {
+      var _pd = String(cust.phone).replace(/\D/g, '');
+      var _pm = _pd ? new Array(Math.min(6, _pd.length) + 1).join('*') + _pd.slice(Math.min(6, _pd.length)) : cust.phone;
+      b.line('Phone    : ' + _pm);
+    }
     b.line('Date/Time: ' + dateOf(billTs))
      .ruler('-');
 

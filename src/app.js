@@ -410,35 +410,100 @@ function initCap(s){return(s||'').toLowerCase().replace(/\b\w/g,function(c){retu
 function todayCount(custs){var t=new Date().toDateString();return custs.filter(function(c){return new Date(c.date).toDateString()===t;}).length;}
 function uuid(){return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return(c==='x'?r:r&0x3|0x8).toString(16);});}
 
-// Map known category names to a small icon. Falls back to a generic 🍽 for unknowns.
-function catIcon(cat){
+// Each menu category carries a recognizable food image. Matched by name, with a
+// generic utensils fallback. These are line icons (see FOOD_ICON below), one
+// stroke, taking the text colour — not emoji, not bare dots.
+function catIconName(cat){
   var c=(cat||'').toLowerCase();
-  if(c.indexOf('break')!==-1) return '🍳';
-  if(c==='veg'||c.indexOf('veg')===0) return '🥗';
-  if(c.indexOf('non')!==-1&&c.indexOf('veg')!==-1) return '🍗';
-  if(c.indexOf('bhakri')!==-1) return '🌾';
-  if(c.indexOf('chapati')!==-1||c.indexOf('roti')!==-1) return '🫓';
-  if(c.indexOf('cold')!==-1||c.indexOf('drink')!==-1||c.indexOf('juice')!==-1||c.indexOf('soda')!==-1) return '🥤';
-  if(c.indexOf('water')!==-1) return '💧';
-  if(c.indexOf('glass')!==-1) return '🥃';
-  if(c.indexOf('tea')!==-1) return '🍵';
-  if(c.indexOf('coffee')!==-1) return '☕';
-  if(c.indexOf('rice')!==-1||c.indexOf('biryani')!==-1) return '🍚';
-  if(c.indexOf('dessert')!==-1||c.indexOf('sweet')!==-1) return '🍰';
-  if(c.indexOf('snack')!==-1||c.indexOf('starter')!==-1) return '🍿';
-  if(c.indexOf('soup')!==-1) return '🍲';
-  if(c.indexOf('curry')!==-1) return '🍛';
-  if(c.indexOf('seafood')!==-1||c.indexOf('fish')!==-1) return '🐟';
-  if(c.indexOf('egg')!==-1) return '🥚';
-  if(c.indexOf('cigarette')!==-1||c.indexOf('smoke')!==-1) return '🚬';
-  return '🍽';
+  if(c.indexOf('break')!==-1) return 'egg';
+  if(c.indexOf('non')!==-1&&c.indexOf('veg')!==-1) return 'drumstick';
+  if(c==='veg'||c.indexOf('veg')===0) return 'leaf';
+  if(c.indexOf('bhakri')!==-1||c.indexOf('chapati')!==-1||c.indexOf('roti')!==-1||c.indexOf('bread')!==-1) return 'wheat';
+  if(c.indexOf('water')!==-1) return 'glass';
+  if(c.indexOf('cold')!==-1||c.indexOf('drink')!==-1||c.indexOf('juice')!==-1||c.indexOf('soda')!==-1||c.indexOf('glass')!==-1) return 'cup';
+  if(c.indexOf('tea')!==-1||c.indexOf('coffee')!==-1) return 'coffee';
+  if(c.indexOf('dessert')!==-1||c.indexOf('sweet')!==-1||c.indexOf('cake')!==-1) return 'dessert';
+  if(c.indexOf('snack')!==-1||c.indexOf('starter')!==-1) return 'snack';
+  if(c.indexOf('soup')!==-1) return 'soup';
+  if(c.indexOf('seafood')!==-1||c.indexOf('fish')!==-1) return 'fish';
+  if(c.indexOf('egg')!==-1) return 'egg';
+  if(c.indexOf('cigarette')!==-1||c.indexOf('smoke')!==-1) return 'cigarette';
+  // rice, biryani, curry, thali and anything unmatched read as a cooked dish.
+  return 'utensils';
 }
-function Chip(props){var c=clr(props.cat,props.cats);return h('span',{className:'chip',title:props.cat,style:{background:c.bg,color:c.tx,padding:'2px 6px',fontSize:14,minWidth:24,textAlign:'center'}},catIcon(props.cat));}
+function catIcon(cat,size){return ic(catIconName(cat),size);}
+function Chip(props){return h('span',{title:props.cat,style:{display:'inline-flex',color:clr(props.cat,props.cats).tx,flexShrink:0}},catIcon(props.cat,16));}
+
+// ── Line icons ────────────────────────────────────
+// One inline-SVG set (lucide geometry) at one stroke, taking the text colour —
+// replaces the emoji that used to decorate every button and label. `ic(name)`
+// returns an 18px glyph; pass a size for the few that differ.
+var ICON_PATHS={
+  check:['M20 6 9 17l-5-5'],
+  x:['M18 6 6 18','M6 6l12 12'],
+  trash:['M3 6h18','M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6','M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2','M10 11v6','M14 11v6'],
+  printer:['M6 9V2h12v7','M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2','M6 14h12v8H6z'],
+  receipt:['M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z','M8 8h8','M8 12h8','M8 16h5'],
+  chef:['M17 21a1 1 0 0 0 1-1v-5.35c0-.457.316-.844.727-1.041a4 4 0 0 0-2.134-7.589 5 5 0 0 0-9.186 0 4 4 0 0 0-2.134 7.588c.411.198.727.585.727 1.041V20a1 1 0 0 0 1 1Z','M6 17h12'],
+  pencil:['M12 20h9','M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z'],
+  download:['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4','M7 10l5 5 5-5','M12 15V3'],
+  upload:['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4','M17 8l-5-5-5 5','M12 3v12'],
+  phone:['M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z'],
+  calendar:['M8 2v4','M16 2v4','M3 10h18','M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z'],
+  image:['M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z','M8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z','M21 15l-5-5L5 21'],
+  file:['M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z','M14 2v5h5','M9 13h6','M9 17h6'],
+  message:['M7.9 20A9 9 0 1 0 4 16.1L2 22Z'],
+  smartphone:['M5 4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z','M12 18h.01'],
+  key:['M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 1 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z','M16.5 7.5h.01'],
+  mail:['M2 5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z','M2 7l10 6 10-6'],
+  folder:['M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z'],
+  power:['M12 2v10','M18.36 6.64a9 9 0 1 1-12.73 0'],
+  barchart:['M3 3v18h18','M18 17V9','M13 17V5','M8 17v-3'],
+  trending:['M22 7 13.5 15.5 8.5 10.5 2 17','M16 7h6v6'],
+  trophy:['M6 9H4.5a2.5 2.5 0 0 1 0-5H6','M18 9h1.5a2.5 2.5 0 0 0 0-5H18','M4 22h16','M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22','M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22','M18 2H6v7a6 6 0 0 0 12 0V2Z'],
+  card:['M2 5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z','M2 10h20'],
+  left:['M19 12H5','M12 19l-7-7 7-7'],
+  right:['M5 12h14','M12 5l7 7-7 7'],
+  plus:['M12 5v14','M5 12h14'],
+  save:['M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z','M17 21v-8H7v8','M7 3v5h8'],
+  alert:['M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z','M12 9v4','M12 17h.01'],
+  clock:['M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z','M12 6v6l4 2'],
+  settings:['M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z']
+};
+// Food images for menu categories (lucide geometry).
+Object.assign(ICON_PATHS,{
+  egg:['M12 22c6.23-.05 7.87-5.57 7.5-10-.36-4.34-3.95-9.96-7.5-10-3.55.04-7.14 5.66-7.5 10-.37 4.43 1.27 9.95 7.5 10z'],
+  leaf:['M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z','M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12'],
+  drumstick:['M15.45 15.4c-2.13.65-4.3.32-5.7-1.1-2.29-2.27-1.76-6.5 1.17-9.42 2.93-2.93 7.15-3.46 9.43-1.18 1.41 1.41 1.74 3.57 1.1 5.71-1.4-.51-3.26-.02-4.64 1.36-1.38 1.38-1.87 3.23-1.36 4.63z','M11.25 15.6l-2.16 2.16a2.5 2.5 0 1 1-4.56 1.73 2.49 2.49 0 0 1-1.41-4.24 2.5 2.5 0 0 1 3.14-.32l2.16-2.16'],
+  wheat:['M2 22 16 8','M3.47 12.53 5 11l1.53 1.53a3.5 3.5 0 0 1 0 4.94L5 19l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z','M7.47 8.53 9 7l1.53 1.53a3.5 3.5 0 0 1 0 4.94L9 15l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z','M11.47 4.53 13 3l1.53 1.53a3.5 3.5 0 0 1 0 4.94L13 11l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z','M20 2h2v2a4 4 0 0 1-4 4h-2V6a4 4 0 0 1 4-4Z','M11.47 17.47 13 19l-1.53 1.53a3.5 3.5 0 0 1-4.94 0L5 19l1.53-1.53a3.5 3.5 0 0 1 4.94 0Z','M15.47 13.47 17 15l-1.53 1.53a3.5 3.5 0 0 1-4.94 0L9 15l1.53-1.53a3.5 3.5 0 0 1 4.94 0Z','M19.47 9.47 21 11l-1.53 1.53a3.5 3.5 0 0 1-4.94 0L13 11l1.53-1.53a3.5 3.5 0 0 1 4.94 0Z'],
+  glass:['M5.116 4.104A1 1 0 0 1 6.11 3h11.78a1 1 0 0 1 .994 1.105L17.19 20.5a1 1 0 0 1-.994.895H7.804a1 1 0 0 1-.994-.895z','M6 12a5 5 0 0 1 6 0 5 5 0 0 0 6 0'],
+  cup:['m6 8 1.75 12.28a2 2 0 0 0 2 1.72h4.54a2 2 0 0 0 2-1.72L18 8','M5 8h14','M7 15a6.47 6.47 0 0 1 5 0 6.47 6.47 0 0 0 5 0','m12 8 1-6h2'],
+  coffee:['M10 2v2','M14 2v2','M6 2v2','M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1'],
+  dessert:['M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8','M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1','M2 21h20','M7 8v3','M12 8v3','M17 8v3'],
+  snack:['M18 8a2 2 0 0 0 0-4 2 2 0 0 0-4 0 2 2 0 0 0-4 0 2 2 0 0 0-4 0 2 2 0 0 0 0 4','M10 22 9 8','M14 22l1-14','M20 8c.5 0 .9.4.8 1l-2.6 12c-.1.5-.7 1-1.2 1H7c-.6 0-1.1-.5-1.2-1L3.2 9c-.1-.6.3-1 .8-1Z'],
+  soup:['M3 11h18','M5 11a7 7 0 0 0 14 0','M8 22a6 6 0 0 1-3-5','M19 17a6 6 0 0 1-3 5','M12 2a2.4 2.4 0 0 0-1 2 2.4 2.4 0 0 0 1 2','M8.9 2.5a2.4 2.4 0 0 0-1 2 2.4 2.4 0 0 0 1 2','M15.1 2.5a2.4 2.4 0 0 0-1 2 2.4 2.4 0 0 0 1 2'],
+  fish:['M6.5 12c.94-3.46 4.94-6 8.5-6 3.56 0 6.06 2.54 7 6-.94 3.47-3.44 6-7 6s-7.56-2.53-8.5-6Z','M18 12v.5','M16 17.93a9.77 9.77 0 0 1 0-11.86','M7 10.67C7 8 5.58 5.97 2.73 5.5c-1 1.5-1 5 .23 6.5-1.24 1.5-1.24 5-.23 6.5C5.58 18.03 7 16 7 13.33','M10.46 7.26C10.2 5.88 9.17 4.24 8 3h5.8a2 2 0 0 1 1.98 1.67l.23 1.4'],
+  cigarette:['M17 12H3a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h14','M18 8c0-2.5-2-2.5-2-5','M21 16a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1','M22 8c0-2.5-2-2.5-2-5','M7 12v4'],
+  utensils:['M2 12h20','M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8','m4 8 16-4','m8.86 6.78-.45-1.81a2 2 0 0 1 1.45-2.43l1.94-.48a2 2 0 0 1 2.43 1.46l.45 1.8']
+});
+function ic(name,size){
+  var ds=ICON_PATHS[name]; if(!ds) return null;
+  var kids=ds.map(function(d,i){return h('path',{key:i,d:d});});
+  if(name==='settings') kids.unshift(h('circle',{key:'c',cx:12,cy:12,r:3}));
+  return h('svg',{width:size||18,height:size||18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','strokeWidth':1.6,'strokeLinecap':'round','strokeLinejoin':'round','aria-hidden':'true',style:{flexShrink:0,verticalAlign:'-0.18em'}},kids);
+}
+// A button label: icon + text, with the text kept together so wrapping is clean.
+function btn(name,text){return [h('span',{key:'i',style:{display:'inline-flex'}},ic(name)),h('span',{key:'t',style:{marginLeft:6}},text)];}
+function btnR(text,name){return [h('span',{key:'t',style:{marginRight:6}},text),h('span',{key:'i',style:{display:'inline-flex'}},ic(name))];}
 
 // ── SUPABASE DATA LAYER ───────────────────────────
 function sbErr(e){return e&&(e.message||e.details||JSON.stringify(e));}
 // Normalize an Indian mobile number to 10 digits (strips +91 / leading 0 / spaces).
 function normPhone(raw){var d=(raw||'').replace(/\D/g,'');if(d.length===12&&d.slice(0,2)==='91')d=d.slice(2);if(d.length===11&&d.charAt(0)==='0')d=d.slice(1);return d;}
+// Privacy mask for the customer number on bills: hide the first 6 digits, keep
+// the last 4 (so a 10-digit mobile prints as ••••••1234). `ch` lets the thermal
+// printer pass an ASCII char, since its encoder drops non-ASCII glyphs.
+function maskPhone(raw,ch){var d=normPhone(raw);if(!d)return raw||'';ch=ch||'•';var n=Math.min(6,d.length);return new Array(n+1).join(ch)+d.slice(n);}
 // Page through a Supabase table 1000 rows at a time — PostgREST caps a single
 // select at 1000, so a plain select('*') silently truncates a growing table.
 function fetchAllRows(table,shape){
@@ -668,7 +733,26 @@ function LoginScreen(){
   function eyeOffSvg(){return icon([h('path',{key:1,d:'M9.88 9.88a3 3 0 1 0 4.24 4.24'}),h('path',{key:2,d:'M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.2 13.2 0 0 1-1.67 2.68'}),h('path',{key:3,d:'M6.61 6.61A13.5 13.5 0 0 0 2 12s3 7 10 7a9.7 9.7 0 0 0 5.39-1.61'}),h('line',{key:4,x1:2,x2:22,y1:2,y2:22})]);}
   function lockSvg(){return icon([h('rect',{key:1,width:18,height:11,x:3,y:11,rx:2}),h('path',{key:2,d:'M7 11V7a5 5 0 0 1 10 0v4'})],{width:24,height:24});}
 
+  // The product moment: a printed bill, the thing this app makes. Real material
+  // (ink on receipt paper), quiet chrome around it. Decorative only (aria-hidden).
+  function loginReceipt(){
+    var lines=[['पाणी बाटली १ Ltr','×6','₹120'],['चिकन 1 KG','×1','₹400'],['नाचणी पापड','×1','₹60'],['डिस्पोजेबल ग्लास','×5','₹25']];
+    return h('aside',{className:'login-aside','aria-hidden':'true',translate:'no'},
+      h('div',{className:'login-receipt'},
+        h('div',{className:'rc-name'},'GAVTHAN'),
+        h('div',{className:'rc-meta'},'Table 4 · 21 Nov · INV-00412'),
+        h('hr',{className:'rc-rule'}),
+        lines.map(function(r,i){return h('div',{className:'rc-row',key:i},h('span',null,r[0],' ',h('span',{className:'rc-q'},r[1])),h('span',null,r[2]));}),
+        h('hr',{className:'rc-rule'}),
+        h('div',{className:'rc-tot'},h('span',null,'Total'),h('span',null,'₹605')),
+        h('div',{className:'rc-foot'},'Thank you for visiting Gavthan')
+      )
+    );
+  }
+
   return h('div',{className:'login-wrap'},
+    h('div',{className:'login-stage'},
+    loginReceipt(),
     h('div',{className:'login-box'},
       h('div',{className:'login-logo'},h('em',null,'Gavthan')),
       h('div',{className:'login-sub'}, locked?'Account temporarily locked':'Restaurant billing · staff sign in'),
@@ -708,6 +792,7 @@ function LoginScreen(){
               ),
               h('div',{className:'login-foot'},'No account? Ask your admin to add you.')
             )
+    )
     )
   );
 }
@@ -1347,7 +1432,7 @@ function App(props){
     (user.user_metadata&&user.user_metadata.display_name) ||
     user.email.split('@')[0]
   );
-  var tabs=[['orders','Orders'],['new','+'],['history','History']];
+  var tabs=[['orders','Orders'],['history','History']];
   // admin = role-based (includes promoted admins) → Menu, Cust
   // superAdmin = strictly GH_ADMINS seeded emails → Users tab only
   var superAdmin=isAdminEmail(user.email);
@@ -1356,9 +1441,9 @@ function App(props){
 
   return h('div',{className:'wrap'},
     !online&&h('div',{style:{background:'#991B1B',color:'#fff',padding:'6px 12px',fontSize:12,fontWeight:600,textAlign:'center'}},
-      '⚠ You are offline — changes will not be saved until the connection returns.'),
+      ic('alert'),' You are offline — changes will not be saved until the connection returns.'),
     idleWarn&&online&&h('div',{style:{background:'var(--primary)',color:'#fff',padding:'6px 12px',fontSize:12,fontWeight:600,textAlign:'center'}},
-      '⏱ You will be logged out in 1 minute due to inactivity. Move the mouse or tap to stay signed in.'),
+      ic('clock'),' You will be logged out in 1 minute due to inactivity. Move the mouse or tap to stay signed in.'),
     h('div',{className:'hdr'},
       h('div',{className:'logo'},h('em',{translate:'no'},brandMark())),
       h('div',{className:'nav'},tabs.map(function(t){
@@ -1373,13 +1458,13 @@ function App(props){
         h('span',{className:admin?'badge-admin':'badge-user'},admin?'Admin':'Staff'),
         h(TranslateToggle,null),
         h(ThemeToggle,null),
-        h('button',{className:'btn xs btn-r',onClick:logout},'⏻ Sign Out')
+        h('button',{className:'btn xs btn-r',onClick:logout},btn('power','Sign Out'))
       )
     ),
     h('div',{className:'body'},
       appErr&&h('div',{style:{background:'#FEF2F2',color:'#991B1B',border:'1px solid #FECACA',borderRadius:8,padding:'10px 12px',marginBottom:8,fontSize:12,lineHeight:1.7},onClick:function(){setAppErr('');}},
-        h('strong',null,'⚠️ Error — '),appErr,h('span',{style:{float:'right',cursor:'pointer',fontWeight:700}},'✕')),
-      tab==='orders'  &&h(OrdersTab,  {active,menu,cats,selId,setSelId,upsertItem,settle,delCust,setBillId,menuErr,setDiscount,setAdjustment,updateCustomer}),
+        h('strong',null,'Error — '),appErr,h('span',{style:{float:'right',cursor:'pointer',fontWeight:700}},ic('x'))),
+      tab==='orders'  &&h(OrdersTab,  {active,menu,cats,selId,setSelId,upsertItem,settle,delCust,setBillId,menuErr,setDiscount,setAdjustment,updateCustomer,onNew:function(){setTab('new');}}),
       tab==='new'     &&h(NewTab,     {addCust,todayCnt:todayCount(custs),allCusts:custs,admin}),
       tab==='history' &&h(HistoryTab, {settled,todayRev,todaySett,cats,setBillId,delCust,admin,userEmail:user.email,users}),
       tab==='menu'    &&admin&&h(MenuTab,{cats,saveCats,menu,addMenuItem,updateMenuItem,deleteMenuItem,toggleMenuAvail,reorderItems}),
@@ -1402,11 +1487,13 @@ function OrdersTab(props){
   var active=props.active,menu=props.menu,cats=props.cats,selId=props.selId,setSelId=props.setSelId;
   var upsertItem=props.upsertItem,settle=props.settle,delCust=props.delCust,setBillId=props.setBillId,menuErr=props.menuErr||'';
   var _q=useState('');var q=_q[0];var setQ=_q[1];
+  var onNew=props.onNew;
   var list=active.filter(function(c){return (c.name||'').toLowerCase().indexOf(q.toLowerCase())!==-1||(c.room||'').toLowerCase().indexOf(q.toLowerCase())!==-1;});
   return h('div',null,
     menuErr&&h('div',{style:{background:'#FEF2F2',color:'#991B1B',border:'1px solid #FECACA',borderRadius:8,padding:'10px 12px',marginBottom:8,fontSize:12}},menuErr),
+    onNew&&h('button',{className:'btn btn-a',style:{marginBottom:8},onClick:onNew},btn('plus','New order')),
     h('input',{placeholder:'Search customer / room…',value:q,onChange:function(e){setQ(e.target.value);},style:{marginBottom:8}}),
-    list.length===0&&h('div',{className:'empty card'},'No active customers. Tap + to add.'),
+    list.length===0&&h('div',{className:'empty card'},'No active customers. Tap New order to add.'),
     list.map(function(c){
       return h('div',{key:c.id,className:'ccard'+(c.id===selId?' sel':''),onClick:function(){setSelId(c.id===selId?null:c.id);}},
         h('div',{className:'row bw',translate:'no'},
@@ -1464,9 +1551,9 @@ function OrderPanel(props){
   }
   return h('div',{onClick:function(e){e.stopPropagation();}},
     h('div',{className:'hr'}),
-    h('div',{style:{fontSize:11,color:'var(--primary)',fontWeight:700,letterSpacing:0.5,marginBottom:4}},'➕ ADD ITEMS'),
+    h('div',{style:{fontSize:11,color:'var(--primary)',fontWeight:600,marginBottom:4}},'Add items'),
     h('input',{placeholder:'Search menu…',value:q,onChange:function(e){setQ(e.target.value);},style:{marginBottom:6}}),
-    h('div',{className:'cats'},cats.map(function(c){return h('button',{key:c,className:cat===c?'on':'',title:c,onClick:function(){setCat(c);},style:{fontSize:18,padding:'4px 10px',lineHeight:1}},catIcon(c));})),
+    h('div',{className:'cats'},cats.map(function(c){return h('button',{key:c,className:cat===c?'on':'',title:c,onClick:function(){setCat(c);},style:{fontSize:12,padding:'6px 12px',lineHeight:1,display:'flex',alignItems:'center',gap:6},translate:'no'},catIcon(c,16),c);})),
     h('div',{className:'sb'},filtered.length===0?h('div',{style:{fontSize:12,color:'var(--text-2)',padding:8}},'No items.'):
       filtered.map(function(mi){
         var inO=cust.items.find(function(i){return i.id===mi.id;});
@@ -1483,7 +1570,7 @@ function OrderPanel(props){
     // ── Visible section divider between menu picker and current bill ──
     cust.items.length>0&&h('div',{style:{borderTop:'2px dashed var(--primary)',marginTop:10,marginBottom:6,paddingTop:8}}),
     cust.items.length>0&&h('div',{className:'cur-order'},
-      h('div',{style:{fontSize:11,color:'var(--green)',fontWeight:700,letterSpacing:0.5,marginBottom:6}},'🧾 CURRENT ORDER'),
+      h('div',{style:{fontSize:11,color:'var(--green)',fontWeight:600,marginBottom:6}},'Current order'),
       h('div',{className:'sb'},cust.items.map(function(it){
         var tms=itemTimes(it);
         return h('div',{key:it.id,className:'li'},
@@ -1552,18 +1639,18 @@ function OrderPanel(props){
     ),
     h('div',{className:'hr'}),
     h('div',{className:'row',style:{gap:5}},
-      h('button',{className:'btn xs',onClick:function(){setBillId(cust.id);}},'🧾 Bill'),
-      h('button',{className:'btn xs',translate:'no',onClick:function(){if(!cust.items.length){alert('No items to send to kitchen.');return;}setKotOpen(true);}},'👨‍🍳 KOT'),
-      h('button',{className:'btn btn-g xs',onClick:function(){settle(cust.id);}},'✓ Settle'),
-      h('button',{className:'btn btn-r xs',onClick:function(){delCust(cust.id);}},'🗑')
+      h('button',{className:'btn xs',onClick:function(){setBillId(cust.id);}},btn('receipt','Bill')),
+      h('button',{className:'btn xs',translate:'no',onClick:function(){if(!cust.items.length){alert('No items to send to kitchen.');return;}setKotOpen(true);}},btn('chef','KOT')),
+      h('button',{className:'btn btn-g xs',onClick:function(){settle(cust.id);}},btn('check','Settle')),
+      h('button',{className:'btn btn-r xs',onClick:function(){delCust(cust.id);}},ic('trash'))
     ),
     // KOT confirmation modal (mirrors the Bill button's modal workflow): preview
     // the kitchen ticket, then Print or Cancel — no direct-to-printer send.
     kotOpen&&h('div',{className:'ovl',onClick:function(){setKotOpen(false);}},
       h('div',{className:'modal',style:{maxWidth:380},onClick:function(e){e.stopPropagation();}},
         h('div',{className:'mhdr'},
-          h('span',{style:{fontWeight:700,fontSize:13}},'👨‍🍳 Kitchen Order (KOT)'),
-          h('button',{className:'btn xs',onClick:function(){setKotOpen(false);}},'✕')
+          h('span',{style:{fontWeight:700,fontSize:13}},[ic('chef'),' Kitchen Order (KOT)']),
+          h('button',{className:'btn xs',onClick:function(){setKotOpen(false);}},ic('x'))
         ),
         h('div',{className:'mbody'},
           // Actual kitchen-ticket preview (item names + every add-time + count) —
@@ -1590,7 +1677,7 @@ function OrderPanel(props){
           ),
           h('div',{className:'row',style:{gap:6,marginTop:12}},
             h('button',{className:'btn',style:{flex:1,justifyContent:'center'},onClick:function(){setKotOpen(false);}},'Cancel'),
-            h('button',{className:'btn btn-a',style:{flex:1,justifyContent:'center'},onClick:function(){setKotOpen(false);printKOT();}},'🖨 Print')
+            h('button',{className:'btn btn-a',style:{flex:1,justifyContent:'center'},onClick:function(){setKotOpen(false);printKOT();}},btn('printer','Print'))
           )
         )
       )
@@ -1715,7 +1802,7 @@ function NewTab(props){
         h('div',{className:'muted',style:{fontSize:11,marginBottom:3}},'Phone (optional)'),
         h('div',{className:'row',style:{gap:4}},
           h('input',{value:phone,onChange:function(e){setPhone(e.target.value);},placeholder:'10 digits',onKeyDown:function(e){if(e.key==='Enter')submit();},style:{flex:1}}),
-          hasContacts&&h('button',{className:'btn xs',style:{flexShrink:0},onClick:pickFromContacts,title:'Pick from device contacts (Chrome Android only)'},'📇')
+          hasContacts&&h('button',{className:'btn xs',style:{flexShrink:0},onClick:pickFromContacts,title:'Pick from device contacts (Chrome Android only)'},ic('smartphone'))
         ),
         !hasContacts&&h('div',{className:'muted',style:{fontSize:10,marginTop:2}},'Tip: Use Chrome on Android to pick from contacts.')
       ),
@@ -1786,7 +1873,7 @@ function HistoryTab(props){
             h('div',{className:'row bw'},
               h('span',{style:{fontWeight:700}},c.name+' · '+c.room),
               h('div',{className:'row',style:{gap:4}},h('span',{style:{fontWeight:700,color:'var(--primary)'}},'₹'+t),
-                h('button',{className:'btn xs',onClick:function(){setBillId(c.id);}},'🧾 Bill'))
+                h('button',{className:'btn xs',onClick:function(){setBillId(c.id);}},btn('receipt','Bill')))
             ),
             h('div',{className:'row',style:{gap:5}},h('span',{className:'muted',style:{fontSize:10}},fmtDT(billDateTime(c))),h('span',{className:'tag-s'},'Settled'),c.bill_no&&h('span',{style:{fontSize:10,fontWeight:700,color:'var(--primary)'}},fmtBill(c.bill_no))),
             h('div',{style:{fontSize:11,color:'var(--text-2)'}},c.items.slice(0,3).map(function(i){return i.name+'×'+i.qty;}).join(', ')+(c.items.length>3?', …':'')),
@@ -1944,8 +2031,8 @@ function HistoryTab(props){
       h('div',{className:'row bw',style:{marginBottom:10,flexWrap:'wrap',gap:6}},
         h('div',{className:'ttl',style:{margin:0}},'Billing History'),
         h('div',{className:'row',style:{gap:4}},
-          shown.length>0&&h('button',{className:'btn xs btn-g',onClick:exportCSV,title:'Download filtered orders as Excel (.xlsx)'},'⬇ Export Excel'),
-          hasFilter&&h('button',{className:'btn xs btn-r',onClick:function(){setSearchName('');setDateFrom('');setDateTo('');setSelStaff('all');setFilterMode('date');}},'✕ Clear')
+          shown.length>0&&h('button',{className:'btn xs btn-g',onClick:exportCSV,title:'Download filtered orders as Excel (.xlsx)'},btn('download','Export Excel')),
+          hasFilter&&h('button',{className:'btn xs btn-r',onClick:function(){setSearchName('');setDateFrom('');setDateTo('');setSelStaff('all');setFilterMode('date');}},btn('x','Clear'))
         )
       ),
       h('div',{className:'cats',style:{marginBottom:8}},['date','month','year'].map(function(m){
@@ -1987,8 +2074,8 @@ function HistoryTab(props){
             h('span',{style:{fontWeight:700}},c.name+' · '+c.room),
             h('div',{className:'row',style:{gap:4}},
               h('span',{style:{fontWeight:700,color:'var(--primary)'}},'₹'+t),
-              h('button',{className:'btn xs',onClick:function(){setBillId(c.id);}},'🧾 Bill'),
-              h('button',{className:'btn btn-r xs',onClick:function(){delCust(c.id);}},'🗑')
+              h('button',{className:'btn xs',onClick:function(){setBillId(c.id);}},btn('receipt','Bill')),
+              h('button',{className:'btn btn-r xs',onClick:function(){delCust(c.id);}},ic('trash'))
             )
           ),
           h('div',{className:'row',style:{gap:5,flexWrap:'wrap'}},
@@ -2002,7 +2089,7 @@ function HistoryTab(props){
       }),
       // Pagination controls
       shown.length>PAGE_SIZE&&h('div',{className:'row bw',style:{marginTop:10,paddingTop:8,borderTop:'1px solid var(--border)'}},
-        h('button',{className:'btn xs',onClick:function(){setPage(Math.max(0,safePage-1));},disabled:!(safePage>0),style:{flexShrink:0,opacity:safePage>0?1:0.4}},'← Prev'),
+        h('button',{className:'btn xs',onClick:function(){setPage(Math.max(0,safePage-1));},disabled:!(safePage>0),style:{flexShrink:0,opacity:safePage>0?1:0.4}},btn('left','Prev')),
         // Page numbers stay on ONE row; overflow scrolls horizontally instead of wrapping.
         h('div',{style:{display:'flex',gap:3,flexWrap:'nowrap',justifyContent:'center',overflowX:'auto',minWidth:0,flex:1,scrollbarWidth:'none'}},
           (function(){
@@ -2017,7 +2104,7 @@ function HistoryTab(props){
             return btns;
           })()
         ),
-        h('button',{className:'btn xs',onClick:function(){setPage(Math.min(totalPages-1,safePage+1));},disabled:!(safePage<totalPages-1),style:{flexShrink:0,opacity:safePage<totalPages-1?1:0.4}},'Next →')
+        h('button',{className:'btn xs',onClick:function(){setPage(Math.min(totalPages-1,safePage+1));},disabled:!(safePage<totalPages-1),style:{flexShrink:0,opacity:safePage<totalPages-1?1:0.4}},btnR('Next','right'))
       )
     )
   );
@@ -2106,7 +2193,7 @@ function MenuTab(props){
         var cnt=menu.filter(function(m){return m.cat===cat;}).length;
         if(editCatId===cat)return h('div',{key:cat,'data-cat':cat,style:{marginBottom:6}},h('div',{className:'editrow row'},
           h('input',{value:editCatVal,onChange:function(e){setEditCatVal(e.target.value);},autoFocus:true,style:{flex:1,fontSize:12},onKeyDown:function(e){if(e.key==='Enter')doSaveCat();if(e.key==='Escape')setEditCatId(null);}}),
-          h('button',{className:'btn btn-a xs',onClick:doSaveCat},'✓ Save'),
+          h('button',{className:'btn btn-a xs',onClick:doSaveCat},btn('check','Save')),
           h('button',{className:'btn xs',onClick:function(){setEditCatId(null);}},'Cancel')
         ));
         return h('div',{key:cat,'data-cat':cat,style:{marginBottom:6}},
@@ -2118,8 +2205,8 @@ function MenuTab(props){
               h('span',{className:'muted',style:{fontSize:11}},cnt+' item'+(cnt!==1?'s':''))
             ),
             h('div',{className:'row',style:{gap:4}},
-              h('button',{className:'btn xs',onClick:function(e){e.stopPropagation();setEditCatId(cat);setEditCatVal(cat);}},'✏ Rename'),
-              h('button',{className:'btn btn-r xs',onClick:function(e){e.stopPropagation();doDelCat(cat);}},'🗑 Delete')
+              h('button',{className:'btn xs',onClick:function(e){e.stopPropagation();setEditCatId(cat);setEditCatVal(cat);}},btn('pencil','Rename')),
+              h('button',{className:'btn btn-r xs',onClick:function(e){e.stopPropagation();doDelCat(cat);}},btn('trash','Delete'))
             )
           )
         );
@@ -2137,7 +2224,7 @@ function MenuTab(props){
               h('input',{value:editN,onChange:function(e){setEditN(e.target.value);},style:{flex:2},autoFocus:true,onKeyDown:function(e){if(e.key==='Enter')doSaveItem();}}),
               h('input',{value:editP,type:'number',min:0,onChange:function(e){setEditP(e.target.value);},style:{flex:1,maxWidth:72}})
             ),
-            h('div',{className:'row',style:{gap:4}},h('button',{className:'btn btn-a xs',onClick:doSaveItem},'✓ Save'),h('button',{className:'btn xs',onClick:function(){setEditId(null);}},'Cancel'))
+            h('div',{className:'row',style:{gap:4}},h('button',{className:'btn btn-a xs',onClick:doSaveItem},btn('check','Save')),h('button',{className:'btn xs',onClick:function(){setEditId(null);}},'Cancel'))
           );
           var avail=it.available!==false;
           return h('div',{key:it.id,'data-itemid':it.id,className:'li menu-li',style:{opacity:avail?1:0.55}},
@@ -2145,8 +2232,8 @@ function MenuTab(props){
             h('span',{className:'menu-name'},it.name,!avail&&h('span',{style:{fontSize:10,color:'#991B1B',fontWeight:700,marginLeft:5}},'OUT OF STOCK')),
             h('span',{style:{fontWeight:700,color:'var(--primary)',minWidth:40,textAlign:'right'}},'₹'+it.price),
             h('button',{className:'btn xs '+(avail?'btn-r':'btn-g'),style:{marginLeft:8},onClick:function(){toggleMenuAvail(it.id,!avail);}},avail?'Mark Out':'Mark In'),
-            h('button',{className:'btn xs',onClick:function(){setEditId(it.id);setEditN(it.name);setEditP(''+it.price);}},'✏ Edit'),
-            h('button',{className:'btn btn-r xs',onClick:function(){deleteMenuItem(it.id);}},'🗑 Del')
+            h('button',{className:'btn xs',onClick:function(){setEditId(it.id);setEditN(it.name);setEditP(''+it.price);}},btn('pencil','Edit')),
+            h('button',{className:'btn btn-r xs',onClick:function(){deleteMenuItem(it.id);}},btn('trash','Del'))
           );
         })
       ),
@@ -2249,15 +2336,15 @@ function CustomersTab(props){
             h('span',{style:{fontWeight:700,color:'var(--primary)'}},'₹'+r.totalSpent)
           ),
           h('div',{className:'row',style:{gap:6,flexWrap:'wrap',fontSize:11,color:'var(--text-2)'}},
-            r.phone&&h('span',null,'📞 '+r.phone),
-            h('span',null,'🗓 '+r.visits+' visit'+(r.visits!==1?'s':'')+' ('+r.settled+' settled)'),
+            r.phone&&h('span',null,ic('phone'),' '+r.phone),
+            h('span',null,ic('calendar'),' '+r.visits+' visit'+(r.visits!==1?'s':'')+' ('+r.settled+' settled)'),
             h('span',null,'Last: '+fmtDT(r.lastVisit))
           )
         );
       }),
       // Pagination controls — mirrors HistoryTab: ← Prev · numbered pages · Next →
       filtered.length>PAGE_SIZE&&h('div',{className:'row bw',style:{marginTop:10,paddingTop:8,borderTop:'1px solid var(--border)'}},
-        h('button',{className:'btn xs',onClick:function(){setPage(Math.max(0,safePage-1));},disabled:!(safePage>0),style:{flexShrink:0,opacity:safePage>0?1:0.4}},'← Prev'),
+        h('button',{className:'btn xs',onClick:function(){setPage(Math.max(0,safePage-1));},disabled:!(safePage>0),style:{flexShrink:0,opacity:safePage>0?1:0.4}},btn('left','Prev')),
         // Page numbers stay on ONE row; overflow scrolls horizontally instead of wrapping.
         h('div',{style:{display:'flex',gap:3,flexWrap:'nowrap',justifyContent:'center',overflowX:'auto',minWidth:0,flex:1,scrollbarWidth:'none'}},
           (function(){
@@ -2272,7 +2359,7 @@ function CustomersTab(props){
             return btns;
           })()
         ),
-        h('button',{className:'btn xs',onClick:function(){setPage(Math.min(totalPages-1,safePage+1));},disabled:!(safePage<totalPages-1),style:{flexShrink:0,opacity:safePage<totalPages-1?1:0.4}},'Next →')
+        h('button',{className:'btn xs',onClick:function(){setPage(Math.min(totalPages-1,safePage+1));},disabled:!(safePage<totalPages-1),style:{flexShrink:0,opacity:safePage<totalPages-1?1:0.4}},btnR('Next','right'))
       )
     )
   );
@@ -2454,7 +2541,7 @@ function UsersTab(props){
     // Thermal Printer Settings card
     h('div',{className:'card'},
       h('div',{className:'ttl'},'Thermal Printer (ESC/POS)'),
-      h('div',{className:'muted',style:{fontSize:11,marginBottom:8}},'Configure how the 🧾 Thermal button delivers bills to the printer. Bluetooth works on Chrome/Edge (Android, Desktop). For iOS/Safari, use the WebSocket relay.'),
+      h('div',{className:'muted',style:{fontSize:11,marginBottom:8}},'Configure how the Thermal button delivers bills to the printer. Bluetooth works on Chrome/Edge (Android, Desktop). For iOS/Safari, use the WebSocket relay.'),
       h('div',{className:'row',style:{gap:8,marginBottom:6,flexWrap:'wrap'}},
         h('label',{className:'row',style:{gap:4,cursor:'pointer',fontSize:12}},
           h('input',{type:'radio',name:'thtr',checked:(thermSettings.transport||'bt')==='bt',style:{width:'auto'},
@@ -2481,8 +2568,8 @@ function UsersTab(props){
       h('div',{className:'ttl'},'Backup & Restore'),
       h('div',{className:'muted',style:{fontSize:11,marginBottom:8}},'Manual JSON backup of menu, customers, orders, users, config.'),
       h('div',{className:'row',style:{gap:6,flexWrap:'wrap'}},
-        h('button',{className:'btn btn-a xs',onClick:function(){backupDatabase().catch(function(e){setRestoreMsg('Error: '+e.message);});}},'⬇ Download Backup'),
-        h('label',{className:'btn btn-r xs',style:{cursor:'pointer'}},'⬆ Restore from File',
+        h('button',{className:'btn btn-a xs',onClick:function(){backupDatabase().catch(function(e){setRestoreMsg('Error: '+e.message);});}},btn('download','Download Backup')),
+        h('label',{className:'btn btn-r xs',style:{cursor:'pointer'}},btn('upload','Restore from File'),
           h('input',{type:'file',accept:'.json,application/json',style:{display:'none'},onChange:doRestoreFile}))
       ),
       restoreMsg&&h('div',{style:{marginTop:6,fontSize:11,color:restoreMsg.indexOf('✓')===0?'#166534':(restoreMsg.indexOf('Error')!==-1?'#991B1B':'var(--text-2)'),whiteSpace:'pre-wrap'}},restoreMsg),
@@ -2493,7 +2580,7 @@ function UsersTab(props){
       h('div',{className:'ttl'},'Google Drive Auto-Backup'),
       !Drive.configured()
         ? h('div',{className:'muted',style:{fontSize:11}},
-            h('div',{style:{marginBottom:6}},'⚙ Not configured. To enable:'),
+            h('div',{style:{marginBottom:6}},'Not configured. To enable:'),
             h('ol',{style:{paddingLeft:18,margin:0,fontSize:11}},
               h('li',null,'Create OAuth Client ID at Google Cloud Console (Web application type)'),
               h('li',null,'Add your app URL (e.g. https://you.github.io/...) to Authorized JavaScript origins'),
@@ -2515,9 +2602,9 @@ function UsersTab(props){
                 h('select',{value:driveInterval,onChange:function(e){saveDriveInterval(e.target.value);},style:{padding:'4px 6px',fontSize:12}},
                   ['off','daily','weekly','monthly'].map(function(o){return h('option',{key:o,value:o},o.charAt(0).toUpperCase()+o.slice(1));})
                 ),
-                h('button',{className:'btn btn-g xs',onClick:driveBackupNow},'⬆ Backup Now'),
-                h('button',{className:'btn xs',onClick:driveListBackups},'📂 List Backups'),
-                h('button',{className:'btn xs btn-r',onClick:driveDeleteAll,title:'Delete every backup from Drive'},'🗑 Delete All')
+                h('button',{className:'btn btn-g xs',onClick:driveBackupNow},btn('upload','Backup Now')),
+                h('button',{className:'btn xs',onClick:driveListBackups},btn('folder','List Backups')),
+                h('button',{className:'btn xs btn-r',onClick:driveDeleteAll,title:'Delete every backup from Drive'},btn('trash','Delete All'))
               ),
               driveLast&&h('div',{className:'muted',style:{fontSize:10,marginBottom:6}},'Last auto-backup: '+fmtDT(driveLast)),
               driveFiles&&h('div',{style:{maxHeight:200,overflowY:'auto',border:'1px solid var(--border)',borderRadius:6,padding:4}},
@@ -2566,14 +2653,14 @@ function UsersTab(props){
           h('span',{className:u.role==='admin'?'badge-admin':'badge-user'},u.role||'user'),
           !u.active&&h('span',{className:'badge-off'},'Disabled'),
           h('div',{className:'row',style:{gap:4,flexWrap:'wrap'}},
-            setUserPhone&&h('button',{className:'btn xs',onClick:function(){setUserPhone(u);},title:'Mobile number used to sign in'},u.phone?'📱 Change mobile':'📱 Add mobile'),
-            setUserPassword&&h('button',{className:'btn xs btn-y',onClick:function(){setUserPassword(u);},title:'Set a new password (free, no SMS)'},'🔑 Set password')
+            setUserPhone&&h('button',{className:'btn xs',onClick:function(){setUserPhone(u);},title:'Mobile number used to sign in'},u.phone?btn('smartphone','Change mobile'):btn('smartphone','Add mobile')),
+            setUserPassword&&h('button',{className:'btn xs btn-y',onClick:function(){setUserPassword(u);},title:'Set a new password (free, no SMS)'},btn('key','Set password'))
           ),
           !isSelf&&h('div',{className:'row',style:{gap:4,flexWrap:'wrap'}},
-            h('button',{className:'btn xs btn-y',onClick:function(){sendReset(u.email);},'title':'Send reset email'},'📧 Reset Pwd'),
+            h('button',{className:'btn xs btn-y',onClick:function(){sendReset(u.email);},'title':'Send reset email'},btn('mail','Reset Pwd')),
             h('button',{className:'btn xs',onClick:function(){changeUserRole(u.id,u.role==='admin'?'user':'admin');}},u.role==='admin'?'→ Staff':'→ Admin'),
             h('button',{className:'btn xs '+(u.active?'btn-r':'btn-g'),onClick:function(){toggleUserActive(u.id,u.active);}},u.active?'Disable':'Enable'),
-            deleteUser&&h('button',{className:'btn xs btn-r',onClick:function(){deleteUser(u.id,u.email);},title:'Delete user'},'🗑 Delete')
+            deleteUser&&h('button',{className:'btn xs btn-r',onClick:function(){deleteUser(u.id,u.email);},title:'Delete user'},btn('trash','Delete'))
           ),
           isSelf&&h('span',{className:'muted',style:{fontSize:11}},'(you)')
         );
@@ -2673,7 +2760,7 @@ function ManagerTab(props){
   var perLabel={today:'Today','7d':'Last 7 days','30d':'Last 30 days',all:'All time'}[per];
 
   if(settled.length===0)
-    return h('div',{className:'empty'},'📊 No settled bills yet. Once you settle some orders, your sales analytics will appear here.');
+    return h('div',{className:'empty'},'No settled bills yet. Settle some orders and your sales analytics appear here.');
 
   return h('div',{className:'dash'},
     // ── Hero gauge ──
@@ -2695,9 +2782,9 @@ function ManagerTab(props){
     ),
     // ── KPI cards ──
     h('div',{className:'kpis'},
-      h('div',{className:'kpi'},h('div',{className:'kpi-l'},'📈 This Month'),h('div',{className:'kpi-v'},inr(monthRev)),h('div',{className:'kpi-sub'},month.length+' bills')),
-      h('div',{className:'kpi'},h('div',{className:'kpi-l'},'🧾 Avg Bill (today)'),h('div',{className:'kpi-v'},inr(todayAvg))),
-      h('div',{className:'kpi'},h('div',{className:'kpi-l'},'🏆 Best Day'),h('div',{className:'kpi-v'},inr(bestDay))),
+      h('div',{className:'kpi'},h('div',{className:'kpi-l'},ic('trending'),' This Month'),h('div',{className:'kpi-v'},inr(monthRev)),h('div',{className:'kpi-sub'},month.length+' bills')),
+      h('div',{className:'kpi'},h('div',{className:'kpi-l'},ic('receipt'),' Avg Bill (today)'),h('div',{className:'kpi-v'},inr(todayAvg))),
+      h('div',{className:'kpi'},h('div',{className:'kpi-l'},ic('trophy'),' Best Day'),h('div',{className:'kpi-v'},inr(bestDay))),
       h('div',{className:'kpi'},h('div',{className:'kpi-l'},'∑ All-time'),h('div',{className:'kpi-v'},inr(settled.reduce(function(s,c){return s+finalTotal(c);},0))),h('div',{className:'kpi-sub'},settled.length+' bills'))
     ),
     // ── 7-day bar chart ──
@@ -2751,7 +2838,7 @@ function ManagerTab(props){
       topCats.length?h('div',{className:'rank'},topCats.map(function(ct,idx){
         return h('div',{key:ct.cat,className:'rank-row'},
           h('div',{className:'rank-main'},
-            h('div',{className:'rank-name'},catIcon(ct.cat),' ',ct.cat),
+            h('div',{className:'rank-name',style:{display:'flex',alignItems:'center',gap:7},translate:'no'},catIcon(ct.cat,16),ct.cat),
             h('div',{className:'rank-bar'},h('div',{className:'rank-bar-fill',style:{width:(ct.rev/maxCatRev*100)+'%'}}))
           ),
           h('div',{className:'rank-val'},inr(ct.rev))
@@ -2818,7 +2905,7 @@ function BillModal(props){
     lines.push('Room/Table: *'+cust.room+'*');
     var billTs=billDateTime(cust)||cust.date;
     lines.push('Date: '+dateOf(billTs)+'   Time: '+timeOf(billTs));
-    if(cust.phone) lines.push('Phone: '+cust.phone);
+    if(cust.phone) lines.push('Phone: '+maskPhone(cust.phone));
     lines.push('');
     // Monospace table — WhatsApp renders triple-backtick blocks in fixed-width font
     lines.push('```');
@@ -2927,7 +3014,7 @@ function BillModal(props){
     }
     // Date/time shown on the bill = the immutable official Bill Date & Time (see billDateTime)
     var billTs=billDateTime(cust)||cust.date;
-    var body='<h2>GAVTHAN</h2><div class="sub">Receipt / Bill'+(displayBillNo?' '+fmtBill(displayBillNo):'')+'</div><div class="inf"><span><b>'+escHtml(cust.name)+'</b></span><span>'+escHtml(dateOf(billTs))+'</span></div><div class="inf"><span>Room/Table: <b>'+escHtml(cust.room)+'</b></span><span>'+escHtml(timeOf(billTs))+'</span></div>'+(cust.phone?'<div class="inf"><span>Ph: '+escHtml(cust.phone)+'</span></div>':'')+'<hr><table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amt</th></tr></thead><tbody>'+rows+'</tbody></table><hr>'+breakdown+'<div class="tot"><span>TOTAL</span><span>&#8377;'+t+'</span></div>'+payBlock()+'<div class="foot">Thank you for visiting Gavthan!<br>Please come again.</div>';
+    var body='<h2>GAVTHAN</h2><div class="sub">Receipt / Bill'+(displayBillNo?' '+fmtBill(displayBillNo):'')+'</div><div class="inf"><span><b>'+escHtml(cust.name)+'</b></span><span>'+escHtml(dateOf(billTs))+'</span></div><div class="inf"><span>Room/Table: <b>'+escHtml(cust.room)+'</b></span><span>'+escHtml(timeOf(billTs))+'</span></div>'+(cust.phone?'<div class="inf"><span>Ph: '+escHtml(maskPhone(cust.phone))+'</span></div>':'')+'<hr><table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amt</th></tr></thead><tbody>'+rows+'</tbody></table><hr>'+breakdown+'<div class="tot"><span>TOTAL</span><span>&#8377;'+t+'</span></div>'+payBlock()+'<div class="foot">Thank you for visiting Gavthan!<br>Please come again.</div>';
     return {css:css,body:body};
   }
 
@@ -3000,12 +3087,12 @@ function BillModal(props){
   return h('div',{className:'ovl',onClick:onClose},
     h('div',{className:'modal',onClick:function(e){e.stopPropagation();}},
       h('div',{className:'mhdr'},h('span',{style:{fontWeight:700,fontSize:13}},'Bill — '+cust.name),h('div',{className:'row',style:{gap:5,flexWrap:'wrap'}},
-        h('button',{className:'btn xs',onClick:saveJPEG},'🖼 JPEG'),
-        h('button',{className:'btn xs',style:{background:'#B91C1C',color:'#fff',borderColor:'#B91C1C'},onClick:savePDF},'📄 PDF'),
-        h('button',{className:'btn xs',style:{background:'#0F766E',color:'#fff',borderColor:'#0F766E'},onClick:thermalPrint},'🧾 Thermal'),
-        h('button',{className:'btn xs',style:{background:'#25D366',color:'#fff',borderColor:'#25D366'},onClick:sendWhatsApp},'📱 WhatsApp'),
-        h('button',{className:'btn xs',style:{background:'#2563eb',color:'#fff',borderColor:'#2563eb'},onClick:sendSMS},'💬 SMS'),
-        h('button',{className:'btn xs',onClick:onClose},'✕')
+        h('button',{className:'btn xs',onClick:saveJPEG},btn('image','JPEG')),
+        h('button',{className:'btn xs',style:{background:'#B91C1C',color:'#fff',borderColor:'#B91C1C'},onClick:savePDF},btn('file','PDF')),
+        h('button',{className:'btn xs',style:{background:'#0F766E',color:'#fff',borderColor:'#0F766E'},onClick:thermalPrint},btn('receipt','Thermal')),
+        h('button',{className:'btn xs',style:{background:'#25D366',color:'#fff',borderColor:'#25D366'},onClick:sendWhatsApp},btn('message','WhatsApp')),
+        h('button',{className:'btn xs',style:{background:'#2563eb',color:'#fff',borderColor:'#2563eb'},onClick:sendSMS},btn('smartphone','SMS')),
+        h('button',{className:'btn xs',onClick:onClose},ic('x'))
       )),
       h('div',{className:'mbody'},
         // Editable customer details at checkout
@@ -3021,7 +3108,7 @@ function BillModal(props){
             h('div',{className:'muted',style:{fontSize:10,marginBottom:2}},'Phone (10 digits)'),
             h('input',{value:editPhone,onChange:function(e){setEditPhone(e.target.value);setEdited(true);},placeholder:'Optional',type:'tel'})
           ),
-          edited&&h('button',{className:'btn btn-a xs',style:{width:'100%',justifyContent:'center'},onClick:saveEdits},'💾 Save Changes')
+          edited&&h('button',{className:'btn btn-a xs',style:{width:'100%',justifyContent:'center'},onClick:saveEdits},btn('save','Save Changes'))
         ),
         // Deliberate "paper card" in both themes: horizontal padding + border so the
         // white receipt no longer sits flush/cropped against a dark modal background.
@@ -3029,7 +3116,7 @@ function BillModal(props){
         h('div',{style:{textAlign:'center',marginBottom:12}},h('div',{style:{fontSize:18,fontWeight:700,letterSpacing:3}},'GAVTHAN'),h('div',{style:{fontSize:11,color:'var(--text-2)'}},'Receipt / Bill')),
         h('div',{style:{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:2}},h('b',null,cust.name),h('span',null,dateOf(billDateTime(cust)||cust.date))),
         h('div',{style:{fontSize:12,marginBottom:2}},'Room/Table: ',h('b',null,cust.room)),
-        cust.phone&&h('div',{style:{fontSize:12,marginBottom:4}},'Ph: ',h('b',null,cust.phone)),
+        cust.phone&&h('div',{style:{fontSize:12,marginBottom:4}},'Ph: ',h('b',null,maskPhone(cust.phone))),
         h('div',{className:'hr'}),
         h('table',{style:{width:'100%',fontSize:12,borderCollapse:'collapse'}},
           h('thead',null,h('tr',null,['Item','Qty','Rate','Amt'].map(function(hd,i){return h('th',{key:hd,style:{textAlign:i===0?'left':'right',padding:'3px 0',borderBottom:'1px solid var(--border)',fontWeight:700}},hd);}))),
@@ -3054,7 +3141,7 @@ function BillModal(props){
         // Bottom actions — same Cancel/Print pattern as the KOT modal.
         h('div',{className:'row',style:{gap:6,marginTop:12}},
           h('button',{className:'btn',style:{flex:1,justifyContent:'center'},onClick:onClose},'Cancel'),
-          h('button',{className:'btn btn-a',style:{flex:1,justifyContent:'center'},onClick:printBill},'🖨 Print')
+          h('button',{className:'btn btn-a',style:{flex:1,justifyContent:'center'},onClick:printBill},btn('printer','Print'))
         )
       )
     )
