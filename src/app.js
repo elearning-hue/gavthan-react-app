@@ -1432,7 +1432,7 @@ function App(props){
     (user.user_metadata&&user.user_metadata.display_name) ||
     user.email.split('@')[0]
   );
-  var tabs=[['orders','Orders'],['new','+'],['history','History']];
+  var tabs=[['orders','Orders'],['history','History']];
   // admin = role-based (includes promoted admins) → Menu, Cust
   // superAdmin = strictly GH_ADMINS seeded emails → Users tab only
   var superAdmin=isAdminEmail(user.email);
@@ -1491,7 +1491,7 @@ function OrdersTab(props){
   var list=active.filter(function(c){return (c.name||'').toLowerCase().indexOf(q.toLowerCase())!==-1||(c.room||'').toLowerCase().indexOf(q.toLowerCase())!==-1;});
   return h('div',null,
     menuErr&&h('div',{style:{background:'#FEF2F2',color:'#991B1B',border:'1px solid #FECACA',borderRadius:8,padding:'10px 12px',marginBottom:8,fontSize:12}},menuErr),
-    onNew&&h('button',{className:'btn btn-a',style:{width:'100%',justifyContent:'center',marginBottom:8},onClick:onNew},btn('plus','New order')),
+    onNew&&h('button',{className:'btn btn-a',style:{marginBottom:8},onClick:onNew},btn('plus','New order')),
     h('input',{placeholder:'Search customer / room…',value:q,onChange:function(e){setQ(e.target.value);},style:{marginBottom:8}}),
     list.length===0&&h('div',{className:'empty card'},'No active customers. Tap New order to add.'),
     list.map(function(c){
