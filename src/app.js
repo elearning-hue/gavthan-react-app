@@ -1464,7 +1464,7 @@ function App(props){
     h('div',{className:'body'},
       appErr&&h('div',{style:{background:'#FEF2F2',color:'#991B1B',border:'1px solid #FECACA',borderRadius:8,padding:'10px 12px',marginBottom:8,fontSize:12,lineHeight:1.7},onClick:function(){setAppErr('');}},
         h('strong',null,'Error — '),appErr,h('span',{style:{float:'right',cursor:'pointer',fontWeight:700}},ic('x'))),
-      tab==='orders'  &&h(OrdersTab,  {active,menu,cats,selId,setSelId,upsertItem,settle,delCust,setBillId,menuErr,setDiscount,setAdjustment,updateCustomer}),
+      tab==='orders'  &&h(OrdersTab,  {active,menu,cats,selId,setSelId,upsertItem,settle,delCust,setBillId,menuErr,setDiscount,setAdjustment,updateCustomer,onNew:function(){setTab('new');}}),
       tab==='new'     &&h(NewTab,     {addCust,todayCnt:todayCount(custs),allCusts:custs,admin}),
       tab==='history' &&h(HistoryTab, {settled,todayRev,todaySett,cats,setBillId,delCust,admin,userEmail:user.email,users}),
       tab==='menu'    &&admin&&h(MenuTab,{cats,saveCats,menu,addMenuItem,updateMenuItem,deleteMenuItem,toggleMenuAvail,reorderItems}),
@@ -1487,11 +1487,13 @@ function OrdersTab(props){
   var active=props.active,menu=props.menu,cats=props.cats,selId=props.selId,setSelId=props.setSelId;
   var upsertItem=props.upsertItem,settle=props.settle,delCust=props.delCust,setBillId=props.setBillId,menuErr=props.menuErr||'';
   var _q=useState('');var q=_q[0];var setQ=_q[1];
+  var onNew=props.onNew;
   var list=active.filter(function(c){return (c.name||'').toLowerCase().indexOf(q.toLowerCase())!==-1||(c.room||'').toLowerCase().indexOf(q.toLowerCase())!==-1;});
   return h('div',null,
     menuErr&&h('div',{style:{background:'#FEF2F2',color:'#991B1B',border:'1px solid #FECACA',borderRadius:8,padding:'10px 12px',marginBottom:8,fontSize:12}},menuErr),
+    onNew&&h('button',{className:'btn btn-a',style:{width:'100%',justifyContent:'center',marginBottom:8},onClick:onNew},btn('plus','New order')),
     h('input',{placeholder:'Search customer / room…',value:q,onChange:function(e){setQ(e.target.value);},style:{marginBottom:8}}),
-    list.length===0&&h('div',{className:'empty card'},'No active customers. Tap + to add.'),
+    list.length===0&&h('div',{className:'empty card'},'No active customers. Tap New order to add.'),
     list.map(function(c){
       return h('div',{key:c.id,className:'ccard'+(c.id===selId?' sel':''),onClick:function(){setSelId(c.id===selId?null:c.id);}},
         h('div',{className:'row bw',translate:'no'},
