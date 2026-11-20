@@ -410,10 +410,29 @@ function initCap(s){return(s||'').toLowerCase().replace(/\b\w/g,function(c){retu
 function todayCount(custs){var t=new Date().toDateString();return custs.filter(function(c){return new Date(c.date).toDateString()===t;}).length;}
 function uuid(){return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return(c==='x'?r:r&0x3|0x8).toString(16);});}
 
-// A category is marked by its own colour, not a guessed food emoji — a small
-// solid dot next to the item name reads instantly and stays legible in Marathi.
-function catDot(cat,cats){var c=clr(cat,cats);return h('span',{title:cat,style:{display:'inline-block',width:8,height:8,borderRadius:'50%',background:c.tx,flexShrink:0}});}
-function Chip(props){return catDot(props.cat,props.cats);}
+// Each menu category carries a recognizable food image. Matched by name, with a
+// generic utensils fallback. These are line icons (see FOOD_ICON below), one
+// stroke, taking the text colour — not emoji, not bare dots.
+function catIconName(cat){
+  var c=(cat||'').toLowerCase();
+  if(c.indexOf('break')!==-1) return 'egg';
+  if(c.indexOf('non')!==-1&&c.indexOf('veg')!==-1) return 'drumstick';
+  if(c==='veg'||c.indexOf('veg')===0) return 'leaf';
+  if(c.indexOf('bhakri')!==-1||c.indexOf('chapati')!==-1||c.indexOf('roti')!==-1||c.indexOf('bread')!==-1) return 'wheat';
+  if(c.indexOf('water')!==-1) return 'glass';
+  if(c.indexOf('cold')!==-1||c.indexOf('drink')!==-1||c.indexOf('juice')!==-1||c.indexOf('soda')!==-1||c.indexOf('glass')!==-1) return 'cup';
+  if(c.indexOf('tea')!==-1||c.indexOf('coffee')!==-1) return 'coffee';
+  if(c.indexOf('dessert')!==-1||c.indexOf('sweet')!==-1||c.indexOf('cake')!==-1) return 'dessert';
+  if(c.indexOf('snack')!==-1||c.indexOf('starter')!==-1) return 'snack';
+  if(c.indexOf('soup')!==-1) return 'soup';
+  if(c.indexOf('seafood')!==-1||c.indexOf('fish')!==-1) return 'fish';
+  if(c.indexOf('egg')!==-1) return 'egg';
+  if(c.indexOf('cigarette')!==-1||c.indexOf('smoke')!==-1) return 'cigarette';
+  // rice, biryani, curry, thali and anything unmatched read as a cooked dish.
+  return 'utensils';
+}
+function catIcon(cat,size){return ic(catIconName(cat),size);}
+function Chip(props){return h('span',{title:props.cat,style:{display:'inline-flex',color:clr(props.cat,props.cats).tx,flexShrink:0}},catIcon(props.cat,16));}
 
 // ── Line icons ────────────────────────────────────
 // One inline-SVG set (lucide geometry) at one stroke, taking the text colour —
@@ -451,6 +470,22 @@ var ICON_PATHS={
   clock:['M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z','M12 6v6l4 2'],
   settings:['M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z']
 };
+// Food images for menu categories (lucide geometry).
+Object.assign(ICON_PATHS,{
+  egg:['M12 22c6.23-.05 7.87-5.57 7.5-10-.36-4.34-3.95-9.96-7.5-10-3.55.04-7.14 5.66-7.5 10-.37 4.43 1.27 9.95 7.5 10z'],
+  leaf:['M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z','M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12'],
+  drumstick:['M15.45 15.4c-2.13.65-4.3.32-5.7-1.1-2.29-2.27-1.76-6.5 1.17-9.42 2.93-2.93 7.15-3.46 9.43-1.18 1.41 1.41 1.74 3.57 1.1 5.71-1.4-.51-3.26-.02-4.64 1.36-1.38 1.38-1.87 3.23-1.36 4.63z','M11.25 15.6l-2.16 2.16a2.5 2.5 0 1 1-4.56 1.73 2.49 2.49 0 0 1-1.41-4.24 2.5 2.5 0 0 1 3.14-.32l2.16-2.16'],
+  wheat:['M2 22 16 8','M3.47 12.53 5 11l1.53 1.53a3.5 3.5 0 0 1 0 4.94L5 19l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z','M7.47 8.53 9 7l1.53 1.53a3.5 3.5 0 0 1 0 4.94L9 15l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z','M11.47 4.53 13 3l1.53 1.53a3.5 3.5 0 0 1 0 4.94L13 11l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z','M20 2h2v2a4 4 0 0 1-4 4h-2V6a4 4 0 0 1 4-4Z','M11.47 17.47 13 19l-1.53 1.53a3.5 3.5 0 0 1-4.94 0L5 19l1.53-1.53a3.5 3.5 0 0 1 4.94 0Z','M15.47 13.47 17 15l-1.53 1.53a3.5 3.5 0 0 1-4.94 0L9 15l1.53-1.53a3.5 3.5 0 0 1 4.94 0Z','M19.47 9.47 21 11l-1.53 1.53a3.5 3.5 0 0 1-4.94 0L13 11l1.53-1.53a3.5 3.5 0 0 1 4.94 0Z'],
+  glass:['M5.116 4.104A1 1 0 0 1 6.11 3h11.78a1 1 0 0 1 .994 1.105L17.19 20.5a1 1 0 0 1-.994.895H7.804a1 1 0 0 1-.994-.895z','M6 12a5 5 0 0 1 6 0 5 5 0 0 0 6 0'],
+  cup:['m6 8 1.75 12.28a2 2 0 0 0 2 1.72h4.54a2 2 0 0 0 2-1.72L18 8','M5 8h14','M7 15a6.47 6.47 0 0 1 5 0 6.47 6.47 0 0 0 5 0','m12 8 1-6h2'],
+  coffee:['M10 2v2','M14 2v2','M6 2v2','M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1'],
+  dessert:['M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8','M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1','M2 21h20','M7 8v3','M12 8v3','M17 8v3'],
+  snack:['M18 8a2 2 0 0 0 0-4 2 2 0 0 0-4 0 2 2 0 0 0-4 0 2 2 0 0 0-4 0 2 2 0 0 0 0 4','M10 22 9 8','M14 22l1-14','M20 8c.5 0 .9.4.8 1l-2.6 12c-.1.5-.7 1-1.2 1H7c-.6 0-1.1-.5-1.2-1L3.2 9c-.1-.6.3-1 .8-1Z'],
+  soup:['M3 11h18','M5 11a7 7 0 0 0 14 0','M8 22a6 6 0 0 1-3-5','M19 17a6 6 0 0 1-3 5','M12 2a2.4 2.4 0 0 0-1 2 2.4 2.4 0 0 0 1 2','M8.9 2.5a2.4 2.4 0 0 0-1 2 2.4 2.4 0 0 0 1 2','M15.1 2.5a2.4 2.4 0 0 0-1 2 2.4 2.4 0 0 0 1 2'],
+  fish:['M6.5 12c.94-3.46 4.94-6 8.5-6 3.56 0 6.06 2.54 7 6-.94 3.47-3.44 6-7 6s-7.56-2.53-8.5-6Z','M18 12v.5','M16 17.93a9.77 9.77 0 0 1 0-11.86','M7 10.67C7 8 5.58 5.97 2.73 5.5c-1 1.5-1 5 .23 6.5-1.24 1.5-1.24 5-.23 6.5C5.58 18.03 7 16 7 13.33','M10.46 7.26C10.2 5.88 9.17 4.24 8 3h5.8a2 2 0 0 1 1.98 1.67l.23 1.4'],
+  cigarette:['M17 12H3a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h14','M18 8c0-2.5-2-2.5-2-5','M21 16a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1','M22 8c0-2.5-2-2.5-2-5','M7 12v4'],
+  utensils:['M2 12h20','M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8','m4 8 16-4','m8.86 6.78-.45-1.81a2 2 0 0 1 1.45-2.43l1.94-.48a2 2 0 0 1 2.43 1.46l.45 1.8']
+});
 function ic(name,size){
   var ds=ICON_PATHS[name]; if(!ds) return null;
   var kids=ds.map(function(d,i){return h('path',{key:i,d:d});});
@@ -1512,7 +1547,7 @@ function OrderPanel(props){
     h('div',{className:'hr'}),
     h('div',{style:{fontSize:11,color:'var(--primary)',fontWeight:600,marginBottom:4}},'Add items'),
     h('input',{placeholder:'Search menu…',value:q,onChange:function(e){setQ(e.target.value);},style:{marginBottom:6}}),
-    h('div',{className:'cats'},cats.map(function(c){return h('button',{key:c,className:cat===c?'on':'',title:c,onClick:function(){setCat(c);},style:{fontSize:12,padding:'6px 12px',lineHeight:1,display:'flex',alignItems:'center',gap:6},translate:'no'},catDot(c,cats),c);})),
+    h('div',{className:'cats'},cats.map(function(c){return h('button',{key:c,className:cat===c?'on':'',title:c,onClick:function(){setCat(c);},style:{fontSize:12,padding:'6px 12px',lineHeight:1,display:'flex',alignItems:'center',gap:6},translate:'no'},catIcon(c,16),c);})),
     h('div',{className:'sb'},filtered.length===0?h('div',{style:{fontSize:12,color:'var(--text-2)',padding:8}},'No items.'):
       filtered.map(function(mi){
         var inO=cust.items.find(function(i){return i.id===mi.id;});
@@ -2797,7 +2832,7 @@ function ManagerTab(props){
       topCats.length?h('div',{className:'rank'},topCats.map(function(ct,idx){
         return h('div',{key:ct.cat,className:'rank-row'},
           h('div',{className:'rank-main'},
-            h('div',{className:'rank-name',style:{display:'flex',alignItems:'center',gap:7},translate:'no'},catDot(ct.cat,cats),ct.cat),
+            h('div',{className:'rank-name',style:{display:'flex',alignItems:'center',gap:7},translate:'no'},catIcon(ct.cat,16),ct.cat),
             h('div',{className:'rank-bar'},h('div',{className:'rank-bar-fill',style:{width:(ct.rev/maxCatRev*100)+'%'}}))
           ),
           h('div',{className:'rank-val'},inr(ct.rev))
