@@ -500,6 +500,10 @@ function btnR(text,name){return [h('span',{key:'t',style:{marginRight:6}},text),
 function sbErr(e){return e&&(e.message||e.details||JSON.stringify(e));}
 // Normalize an Indian mobile number to 10 digits (strips +91 / leading 0 / spaces).
 function normPhone(raw){var d=(raw||'').replace(/\D/g,'');if(d.length===12&&d.slice(0,2)==='91')d=d.slice(2);if(d.length===11&&d.charAt(0)==='0')d=d.slice(1);return d;}
+// Privacy mask for the customer number on bills: hide the first 6 digits, keep
+// the last 4 (so a 10-digit mobile prints as ••••••1234). `ch` lets the thermal
+// printer pass an ASCII char, since its encoder drops non-ASCII glyphs.
+function maskPhone(raw,ch){var d=normPhone(raw);if(!d)return raw||'';ch=ch||'•';var n=Math.min(6,d.length);return new Array(n+1).join(ch)+d.slice(n);}
 // Page through a Supabase table 1000 rows at a time — PostgREST caps a single
 // select at 1000, so a plain select('*') silently truncates a growing table.
 function fetchAllRows(table,shape){
@@ -2899,7 +2903,7 @@ function BillModal(props){
     lines.push('Room/Table: *'+cust.room+'*');
     var billTs=billDateTime(cust)||cust.date;
     lines.push('Date: '+dateOf(billTs)+'   Time: '+timeOf(billTs));
-    if(cust.phone) lines.push('Phone: '+cust.phone);
+    if(cust.phone) lines.push('Phone: '+maskPhone(cust.phone));
     lines.push('');
     // Monospace table — WhatsApp renders triple-backtick blocks in fixed-width font
     lines.push('```');
@@ -3008,7 +3012,7 @@ function BillModal(props){
     }
     // Date/time shown on the bill = the immutable official Bill Date & Time (see billDateTime)
     var billTs=billDateTime(cust)||cust.date;
-    var body='<h2>GAVTHAN</h2><div class="sub">Receipt / Bill'+(displayBillNo?' '+fmtBill(displayBillNo):'')+'</div><div class="inf"><span><b>'+escHtml(cust.name)+'</b></span><span>'+escHtml(dateOf(billTs))+'</span></div><div class="inf"><span>Room/Table: <b>'+escHtml(cust.room)+'</b></span><span>'+escHtml(timeOf(billTs))+'</span></div>'+(cust.phone?'<div class="inf"><span>Ph: '+escHtml(cust.phone)+'</span></div>':'')+'<hr><table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amt</th></tr></thead><tbody>'+rows+'</tbody></table><hr>'+breakdown+'<div class="tot"><span>TOTAL</span><span>&#8377;'+t+'</span></div>'+payBlock()+'<div class="foot">Thank you for visiting Gavthan!<br>Please come again.</div>';
+    var body='<h2>GAVTHAN</h2><div class="sub">Receipt / Bill'+(displayBillNo?' '+fmtBill(displayBillNo):'')+'</div><div class="inf"><span><b>'+escHtml(cust.name)+'</b></span><span>'+escHtml(dateOf(billTs))+'</span></div><div class="inf"><span>Room/Table: <b>'+escHtml(cust.room)+'</b></span><span>'+escHtml(timeOf(billTs))+'</span></div>'+(cust.phone?'<div class="inf"><span>Ph: '+escHtml(maskPhone(cust.phone))+'</span></div>':'')+'<hr><table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amt</th></tr></thead><tbody>'+rows+'</tbody></table><hr>'+breakdown+'<div class="tot"><span>TOTAL</span><span>&#8377;'+t+'</span></div>'+payBlock()+'<div class="foot">Thank you for visiting Gavthan!<br>Please come again.</div>';
     return {css:css,body:body};
   }
 
@@ -3110,7 +3114,7 @@ function BillModal(props){
         h('div',{style:{textAlign:'center',marginBottom:12}},h('div',{style:{fontSize:18,fontWeight:700,letterSpacing:3}},'GAVTHAN'),h('div',{style:{fontSize:11,color:'var(--text-2)'}},'Receipt / Bill')),
         h('div',{style:{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:2}},h('b',null,cust.name),h('span',null,dateOf(billDateTime(cust)||cust.date))),
         h('div',{style:{fontSize:12,marginBottom:2}},'Room/Table: ',h('b',null,cust.room)),
-        cust.phone&&h('div',{style:{fontSize:12,marginBottom:4}},'Ph: ',h('b',null,cust.phone)),
+        cust.phone&&h('div',{style:{fontSize:12,marginBottom:4}},'Ph: ',h('b',null,maskPhone(cust.phone))),
         h('div',{className:'hr'}),
         h('table',{style:{width:'100%',fontSize:12,borderCollapse:'collapse'}},
           h('thead',null,h('tr',null,['Item','Qty','Rate','Amt'].map(function(hd,i){return h('th',{key:hd,style:{textAlign:i===0?'left':'right',padding:'3px 0',borderBottom:'1px solid var(--border)',fontWeight:700}},hd);}))),
