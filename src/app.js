@@ -668,7 +668,26 @@ function LoginScreen(){
   function eyeOffSvg(){return icon([h('path',{key:1,d:'M9.88 9.88a3 3 0 1 0 4.24 4.24'}),h('path',{key:2,d:'M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.2 13.2 0 0 1-1.67 2.68'}),h('path',{key:3,d:'M6.61 6.61A13.5 13.5 0 0 0 2 12s3 7 10 7a9.7 9.7 0 0 0 5.39-1.61'}),h('line',{key:4,x1:2,x2:22,y1:2,y2:22})]);}
   function lockSvg(){return icon([h('rect',{key:1,width:18,height:11,x:3,y:11,rx:2}),h('path',{key:2,d:'M7 11V7a5 5 0 0 1 10 0v4'})],{width:24,height:24});}
 
+  // The product moment: a printed bill, the thing this app makes. Real material
+  // (ink on receipt paper), quiet chrome around it. Decorative only (aria-hidden).
+  function loginReceipt(){
+    var lines=[['पाणी बाटली १ Ltr','×6','₹120'],['चिकन 1 KG','×1','₹400'],['नाचणी पापड','×1','₹60'],['डिस्पोजेबल ग्लास','×5','₹25']];
+    return h('aside',{className:'login-aside','aria-hidden':'true',translate:'no'},
+      h('div',{className:'login-receipt'},
+        h('div',{className:'rc-name'},'GAVTHAN'),
+        h('div',{className:'rc-meta'},'Table 4 · 21 Nov · INV-00412'),
+        h('hr',{className:'rc-rule'}),
+        lines.map(function(r,i){return h('div',{className:'rc-row',key:i},h('span',null,r[0],' ',h('span',{className:'rc-q'},r[1])),h('span',null,r[2]));}),
+        h('hr',{className:'rc-rule'}),
+        h('div',{className:'rc-tot'},h('span',null,'Total'),h('span',null,'₹605')),
+        h('div',{className:'rc-foot'},'Thank you for visiting Gavthan')
+      )
+    );
+  }
+
   return h('div',{className:'login-wrap'},
+    h('div',{className:'login-stage'},
+    loginReceipt(),
     h('div',{className:'login-box'},
       h('div',{className:'login-logo'},h('em',null,'Gavthan')),
       h('div',{className:'login-sub'}, locked?'Account temporarily locked':'Restaurant billing · staff sign in'),
@@ -708,6 +727,7 @@ function LoginScreen(){
               ),
               h('div',{className:'login-foot'},'No account? Ask your admin to add you.')
             )
+    )
     )
   );
 }

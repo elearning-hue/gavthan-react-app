@@ -418,6 +418,48 @@ select{appearance:none;-webkit-appearance:none;
 .login-link{color:var(--primary);cursor:pointer;font-weight:600;transition:color .15s}
 .login-link:hover{color:var(--primary-600)}
 .login-foot{text-align:center;font-size:11.5px;color:var(--text-3)}
+
+/* ── Login hero: form beside a printed-receipt moment ─────────────────────── */
+.login-stage{display:grid;gap:40px;grid-template-columns:1fr;align-items:center;justify-items:center;width:100%;max-width:460px}
+.login-stage .login-box{margin:0}
+@media (min-width:960px){
+  .login-stage{grid-template-columns:minmax(0,420px) minmax(0,420px);max-width:none;gap:64px;justify-content:center}
+  .login-aside{justify-self:end}
+  .login-box{justify-self:start}
+}
+/* The receipt is the one bright element — real product material, ink on paper.
+   Hidden on phones where the form is the whole screen. */
+.login-aside{display:none}
+@media (min-width:960px){ .login-aside{display:block} }
+.login-receipt{
+  --z:7px;
+  width:320px;max-width:100%;
+  background:#fbf7ef;color:#2a211a;
+  padding:28px 26px 30px;
+  transform:rotate(-1.4deg);
+  box-shadow:0 26px 52px rgba(31,24,16,.20);
+  font-family:'Inter','Segoe UI',system-ui,sans-serif;
+  /* Scalloped top + bottom edges — the receipt / ticket signature. */
+  -webkit-mask:
+    radial-gradient(var(--z) at 50% 0, #0000 98%, #000) 50% 0/calc(2*var(--z)) var(--z) repeat-x,
+    radial-gradient(var(--z) at 50% 100%, #0000 98%, #000) 50% 100%/calc(2*var(--z)) var(--z) repeat-x,
+    linear-gradient(#000 0 0) 50% 50%/100% calc(100% - 2*var(--z)) no-repeat;
+          mask:
+    radial-gradient(var(--z) at 50% 0, #0000 98%, #000) 50% 0/calc(2*var(--z)) var(--z) repeat-x,
+    radial-gradient(var(--z) at 50% 100%, #0000 98%, #000) 50% 100%/calc(2*var(--z)) var(--z) repeat-x,
+    linear-gradient(#000 0 0) 50% 50%/100% calc(100% - 2*var(--z)) no-repeat;
+}
+.login-receipt .rc-name{text-align:center;font-size:20px;font-weight:600;letter-spacing:.14em;margin-bottom:2px}
+.login-receipt .rc-meta{text-align:center;font-size:11px;color:#8a7f70;margin-bottom:14px;font-variant-numeric:tabular-nums}
+.login-receipt .rc-rule{border:0;border-top:1px dashed #cbbfa9;margin:12px 0}
+.login-receipt .rc-row{display:flex;justify-content:space-between;gap:12px;font-size:12.5px;line-height:1.9;font-variant-numeric:tabular-nums}
+.login-receipt .rc-row .rc-q{color:#8a7f70}
+.login-receipt .rc-tot{display:flex;justify-content:space-between;font-weight:600;font-size:15px;font-variant-numeric:tabular-nums}
+.login-receipt .rc-foot{text-align:center;font-size:11px;color:#8a7f70;margin-top:14px}
+@media (prefers-reduced-motion:no-preference){
+  .login-aside{animation:rc-in .5s cubic-bezier(.2,.7,.2,1) both}
+}
+@keyframes rc-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 /* Lockout state */
 .lock-card{text-align:center;padding:6px 2px 2px}
 .lock-ic{
